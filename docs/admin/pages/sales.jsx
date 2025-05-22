@@ -65,7 +65,7 @@ const Sales = () => {
   const handleAddSale = async () => {
     if (!selectedItem || !quantity) return alert('Select item and quantity.');
 
-    const item = inventory.find((inv) => inv.id === selectedItem);
+    const item = inventory.find((inv) => inv.id === Number(selectedItem));
     if (!item) return alert('Item not found.');
 
     const qty = parseInt(quantity, 10);
