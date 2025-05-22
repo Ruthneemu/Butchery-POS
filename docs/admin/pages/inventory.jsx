@@ -11,12 +11,15 @@ const Inventory = () => {
   const [newQuantity, setNewQuantity] = useState('');
   const [newExpiry, setNewExpiry] = useState('');
   const [newPrice, setNewPrice] = useState('');
+  const [newUnit, setNewUnit] = useState('kg');
 
   const [error, setError] = useState('');
   const [editingProduct, setEditingProduct] = useState(null);
   const [editName, setEditName] = useState('');
   const [editQuantity, setEditQuantity] = useState('');
   const [editExpiry, setEditExpiry] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editUnit, setEditUnit] = useState('kg');
 
   // Fetch products from Supabase
   const fetchProducts = async () => {
@@ -54,6 +57,7 @@ const Inventory = () => {
         quantity: Number(newQuantity),
         expiry_date: newExpiry,
         price: Number(newPrice),
+        unit: newUnit, // <-- Add this
       },
     ]);
 
@@ -64,6 +68,7 @@ const Inventory = () => {
       setNewQuantity('');
       setNewExpiry('');
       setNewPrice('');
+      setNewUnit('kg');
       fetchProducts();
     }
   };
@@ -86,6 +91,8 @@ const Inventory = () => {
     setEditName(product.name);
     setEditQuantity(product.quantity);
     setEditExpiry(product.expiry_date?.slice(0, 10) || '');
+    setEditPrice(product.price ?? '');
+    setEditUnit(product.unit ?? 'kg');
   };
 
   // Cancel editing
@@ -94,21 +101,24 @@ const Inventory = () => {
     setEditName('');
     setEditQuantity('');
     setEditExpiry('');
+    setEditUnit('kg');
   };
 
   // Save edited product
   const saveEdit = async (id) => {
-    if (!editName || !editQuantity || !editExpiry) {
+    if (!editName || !editQuantity || !editExpiry || !editPrice) {
       alert('Please fill in all fields');
       return;
     }
 
     const { error } = await supabase
-      .from('inventoryu')
+      .from('inventory')
       .update({
         name: editName,
         quantity: Number(editQuantity),
         expiry_date: editExpiry,
+        price: Number(editPrice),
+        unit: editUnit,
       })
       .eq('id', id);
 
@@ -187,6 +197,21 @@ const Inventory = () => {
           />
         </div>
 
+        <div className="mb-4">
+          <label className="block mb-1 font-medium">Unit</label>
+          <select
+            className="w-full border border-gray-300 rounded px-3 py-2"
+            value={newUnit}
+            onChange={(e) => setNewUnit(e.target.value)}
+          >
+            <option value="kg">kg</option>
+            <option value="piece">piece</option>
+            <option value="g">g</option>
+            <option value="pack">pack</option>
+            {/* Add more units as needed */}
+          </select>
+        </div>
+
         <button
           type="submit"
           className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-semibold"
@@ -209,6 +234,8 @@ const Inventory = () => {
                 <th className="px-4 py-2 text-left">Name</th>
                 <th className="px-4 py-2 text-left">Quantity</th>
                 <th className="px-4 py-2 text-left">Expiry Date</th>
+                <th className="px-4 py-2 text-left">Price</th>
+                <th className="px-4 py-2 text-left">Unit</th>
                 <th className="px-4 py-2 text-left">Actions</th>
               </tr>
             </thead>
@@ -247,6 +274,27 @@ const Inventory = () => {
                           className="border border-gray-300 rounded px-2 py-1 w-full"
                         />
                       </td>
+                      <td className="px-4 py-2">
+                        <input
+                          type="number"
+                          min="0"
+                          value={editPrice}
+                          onChange={(e) => setEditPrice(e.target.value)}
+                          className="border border-gray-300 rounded px-2 py-1 w-full"
+                        />
+                      </td>
+                      <td className="px-4 py-2">
+                        <select
+                          value={editUnit}
+                          onChange={(e) => setEditUnit(e.target.value)}
+                          className="border border-gray-300 rounded px-2 py-1 w-full"
+                        >
+                          <option value="kg">kg</option>
+                          <option value="piece">piece</option>
+                          <option value="g">g</option>
+                          <option value="pack">pack</option>
+                        </select>
+                      </td>
                       <td className="px-4 py-2 space-x-2">
                         <button
                           onClick={() => saveEdit(product.id)}
@@ -281,6 +329,8 @@ const Inventory = () => {
                         ? new Date(product.expiry_date).toLocaleDateString()
                         : 'N/A'}
                     </td>
+                    <td className="px-4 py-2">{product.price}</td>
+                    <td className="px-4 py-2">{product.unit}</td>
                     <td className="px-4 py-2 space-x-2">
                       <button
                         onClick={() => startEditing(product)}
