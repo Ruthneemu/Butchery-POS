@@ -10,6 +10,7 @@ const Inventory = () => {
   const [newName, setNewName] = useState('');
   const [newQuantity, setNewQuantity] = useState('');
   const [newExpiry, setNewExpiry] = useState('');
+  const [newPrice, setNewPrice] = useState('');
 
   const [error, setError] = useState('');
   const [editingProduct, setEditingProduct] = useState(null);
@@ -42,7 +43,7 @@ const Inventory = () => {
     e.preventDefault();
     setError('');
 
-    if (!newName || !newQuantity || !newExpiry) {
+    if (!newName || !newQuantity || !newExpiry || !newPrice) {
       setError('Please fill in all fields');
       return;
     }
@@ -52,6 +53,7 @@ const Inventory = () => {
         name: newName,
         quantity: Number(newQuantity),
         expiry_date: newExpiry,
+        price: Number(newPrice),
       },
     ]);
 
@@ -61,6 +63,7 @@ const Inventory = () => {
       setNewName('');
       setNewQuantity('');
       setNewExpiry('');
+      setNewPrice('');
       fetchProducts();
     }
   };
@@ -101,7 +104,7 @@ const Inventory = () => {
     }
 
     const { error } = await supabase
-      .from('products')
+      .from('inventoryu')
       .update({
         name: editName,
         quantity: Number(editQuantity),
@@ -169,6 +172,18 @@ const Inventory = () => {
             className="w-full border border-gray-300 rounded px-3 py-2"
             value={newExpiry}
             onChange={(e) => setNewExpiry(e.target.value)}
+          />
+        </div>
+
+        <div className="mb-4">
+          <label className="block mb-1 font-medium">Price (KSh)</label>
+          <input
+            type="number"
+            min="0"
+            className="w-full border border-gray-300 rounded px-3 py-2"
+            value={newPrice}
+            onChange={(e) => setNewPrice(e.target.value)}
+            placeholder="e.g., 500"
           />
         </div>
 

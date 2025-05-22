@@ -300,13 +300,10 @@ const Sales = () => {
       </div>
 
       {/* Summary Statistics */}
-      <div className="mb-6 bg-white p-4 rounded shadow text-gray-800">
-        <p>
-          <strong>Total Units Sold:</strong> {totalUnitsSold}
-        </p>
-        <p>
-          <strong>Total Sales Amount:</strong> KSh {totalSalesAmount.toFixed(2)}
-        </p>
+      <div className="mb-6 bg-white rounded shadow p-4">
+        <h2 className="text-xl font-semibold mb-2">Summary</h2>
+        <p>Total Units Sold: <span className="font-bold">{totalUnitsSold}</span></p>
+        <p>Total Sales Amount: <span className="font-bold">KSh {totalSalesAmount.toLocaleString()}</span></p>
       </div>
 
       {/* Sales Table */}
