@@ -88,7 +88,7 @@ const Sales = () => {
         item_id: item.id,
         item_name: item.name,
         quantity: qty,
-        price: item.price,
+        price: item.sellingPrice,
         total,
       },
     ]);
