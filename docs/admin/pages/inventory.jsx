@@ -20,7 +20,7 @@ const Inventory = () => {
   const [editExpiry, setEditExpiry] = useState('');
   const [editPrice, setEditPrice] = useState('');
   const [editUnit, setEditUnit] = useState('kg');
-  const [sellingPrice, setEditSellingPrice] = React.useState('');
+  const [sellingPrice, setSellingPrice] = React.useState('');
 
 
   // Fetch products from Supabase
@@ -203,13 +203,7 @@ const Inventory = () => {
             placeholder="e.g., 500"
           />
         </div>
-        <input
-            type="number"
-            placeholder="Selling Price per unit"
-            value={sellingPrice}
-            onChange={(e) => setSellingPrice(e.target.value)}
-            required
-        />
+        
         <div className="mb-4">
   <label className="block mb-1 font-medium">Selling Price (KSh)</label>
   <input
