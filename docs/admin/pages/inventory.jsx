@@ -20,6 +20,8 @@ const Inventory = () => {
   const [editExpiry, setEditExpiry] = useState('');
   const [editPrice, setEditPrice] = useState('');
   const [editUnit, setEditUnit] = useState('kg');
+  const [sellingPrice, setEditSellingPrice] = React.useState('');
+
 
   // Fetch products from Supabase
   const fetchProducts = async () => {
@@ -58,6 +60,8 @@ const Inventory = () => {
         expiry_date: newExpiry,
         price: Number(newPrice),
         unit: newUnit, // <-- Add this
+        selling_price: Number(sellingPrice), // <-- added
+
       },
     ]);
 
@@ -93,6 +97,7 @@ const Inventory = () => {
     setEditExpiry(product.expiry_date?.slice(0, 10) || '');
     setEditPrice(product.price ?? '');
     setEditUnit(product.unit ?? 'kg');
+    setEditSellingPrice(product.selling_price ?? '');
   };
 
   // Cancel editing
@@ -102,6 +107,7 @@ const Inventory = () => {
     setEditQuantity('');
     setEditExpiry('');
     setEditUnit('kg');
+    setEditSellingPrice('');
   };
 
   // Save edited product
@@ -119,6 +125,7 @@ const Inventory = () => {
         expiry_date: editExpiry,
         price: Number(editPrice),
         unit: editUnit,
+        selling_price: Number(editSellingPrice),
       })
       .eq('id', id);
 
@@ -196,6 +203,25 @@ const Inventory = () => {
             placeholder="e.g., 500"
           />
         </div>
+        <input
+            type="number"
+            placeholder="Selling Price per unit"
+            value={sellingPrice}
+            onChange={(e) => setSellingPrice(e.target.value)}
+            required
+        />
+        <div className="mb-4">
+  <label className="block mb-1 font-medium">Selling Price (KSh)</label>
+  <input
+    type="number"
+    min="0"
+    className="w-full border border-gray-300 rounded px-3 py-2"
+    placeholder="e.g., 600"
+    value={sellingPrice}
+    onChange={(e) => setSellingPrice(e.target.value)}
+    required
+  />
+</div>
 
         <div className="mb-4">
           <label className="block mb-1 font-medium">Unit</label>
@@ -236,6 +262,7 @@ const Inventory = () => {
                 <th className="px-4 py-2 text-left">Expiry Date</th>
                 <th className="px-4 py-2 text-left">Price</th>
                 <th className="px-4 py-2 text-left">Unit</th>
+                <th className="px-4 py-2 text-left">Selling Price</th>
                 <th className="px-4 py-2 text-left">Actions</th>
               </tr>
             </thead>
@@ -295,6 +322,15 @@ const Inventory = () => {
                           <option value="pack">pack</option>
                         </select>
                       </td>
+<td className="px-4 py-2">
+  <input
+    type="number"
+    min="0"
+    value={editSellingPrice}
+    onChange={(e) => setEditSellingPrice(e.target.value)}
+    className="border border-gray-300 rounded px-2 py-1 w-full"
+  />
+</td>
                       <td className="px-4 py-2 space-x-2">
                         <button
                           onClick={() => saveEdit(product.id)}
