@@ -58,7 +58,7 @@ const Sales = () => {
   };
 
   const fetchInventory = async () => {
-    const { data, error } = await supabase.from('inventory').select('id, name, price, quantity');
+    const { data, error } = await supabase.from('inventory').select('id, name, sellingPrice, quantity');
     if (!error) setInventory(data);
   };
 
@@ -73,7 +73,7 @@ const Sales = () => {
 
     if (item.quantity < qty) return alert('Not enough stock!');
 
-    const total = item.price * qty;
+    const total = item.sellingPrice * qty;
 
     // Update inventory quantity
     const { error: updateError } = await supabase
