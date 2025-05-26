@@ -73,7 +73,7 @@ const Sales = () => {
 
     if (item.quantity < qty) return alert('Not enough stock!');
 
-    const total = item.sellingPrice * qty;
+    const total = item.selling_price * qty;
 
     // Update inventory quantity
     const { error: updateError } = await supabase
