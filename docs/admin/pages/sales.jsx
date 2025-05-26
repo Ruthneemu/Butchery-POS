@@ -248,7 +248,7 @@ const Sales = () => {
           <option value="">Select Item</option>
           {inventory.map((item) => (
             <option key={item.id} value={item.id}>
-              {item.name} - KSh {item.price} ({item.quantity} in stock)
+              {item.name} - KSh {item.sellingPrice} ({item.quantity} in stock)
             </option>
           ))}
         </select>
