@@ -58,7 +58,7 @@ const Sales = () => {
   };
 
   const fetchInventory = async () => {
-    const { data, error } = await supabase.from('inventory').select('id, name, sellingPrice, quantity');
+    const { data, error } = await supabase.from('inventory').select('id, name, selling_price, quantity');
     if (!error) setInventory(data);
   };
 
