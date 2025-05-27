@@ -239,9 +239,9 @@ const Sales = () => {
       <h1 className="text-3xl font-bold text-red-700 mb-4">Real-Time Sales Tracker</h1>
 
       {/* Add Sale Form */}
-      <div className="flex flex-wrap gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row flex-wrap gap-4 mb-6">
         <select
-          className="px-4 py-2 border rounded"
+          className="w-full md:w-auto px-4 py-2 border rounded"
           value={selectedItem}
           onChange={(e) => setSelectedItem(e.target.value)}
         >
@@ -255,13 +255,13 @@ const Sales = () => {
         <input
           type="number"
           placeholder="Quantity"
-          className="px-4 py-2 border rounded"
+          className="w-full md:w-auto px-4 py-2 border rounded"
           value={quantity}
           onChange={(e) => setQuantity(e.target.value)}
           min="1"
         />
         <button
-          className="bg-indigo-600 text-white px-4 py-2 rounded"
+          className="w-full md:w-auto bg-indigo-600 text-white px-4 py-2 rounded"
           onClick={handleAddSale}
         >
           Add Sale
@@ -269,16 +269,16 @@ const Sales = () => {
       </div>
 
       {/* Filter and Export */}
-      <div className="flex flex-wrap gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row flex-wrap gap-4 mb-6 ">
         <input
           type="date"
-          className="border px-3 py-2 rounded"
+          className="w-full md:w-auto border px-3 py-2 rounded"
           value={startDate}
           onChange={(e) => setStartDate(e.target.value)}
         />
         <input
           type="date"
-          className="border px-3 py-2 rounded"
+          className="w-full md:w-auto border px-3 py-2 rounded"
           value={endDate}
           onChange={(e) => setEndDate(e.target.value)}
         />
@@ -291,7 +291,7 @@ const Sales = () => {
         >
           Reset Filter
         </button>
-        <button onClick={exportToCSV} className="bg-green-600 text-white px-3 py-2 rounded">
+        <button onClick={exportToCSV} className="w-full md:w-auto bg-green-600 text-white px-3 py-2 rounded">
           Export CSV
         </button>
         <button onClick={exportToPDF} className="bg-blue-600 text-white px-3 py-2 rounded">
@@ -312,7 +312,8 @@ const Sales = () => {
       ) : filteredSales.length === 0 ? (
         <p>No sales found.</p>
       ) : (
-        <table className="w-full bg-white shadow rounded table-auto">
+        <div className="overflow-x-auto">
+        <table className="w-full bg-white shadow rounded table-auto min-w-[600px]">
           <thead className="bg-red-700 text-white">
             <tr>
               <th className="px-4 py-2 text-left">#</th>
@@ -382,6 +383,7 @@ const Sales = () => {
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
     </Layout>

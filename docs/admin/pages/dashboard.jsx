@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+} from "recharts";
 import Layout from "../components/layout";
 import supabase from "../supabaseClient";
 
@@ -92,7 +94,6 @@ const Dashboard = () => {
     return () => supabase.removeChannel(channel);
   }, []);
 
-  // Offline fallback
   useEffect(() => {
     const cached = localStorage.getItem("dashboardCache");
     if (cached && (!summary.totalProducts || !recentSales.length)) {
@@ -106,15 +107,14 @@ const Dashboard = () => {
   return (
     <Layout title="Dashboard">
       {/* Summary Cards */}
-     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-  <SummaryCard label="Total Products" value={summary.totalProducts} color="bg-blue-100" />
-  <SummaryCard label="Sales Today" value={`KES ${summary.totalSalesToday}`} color="bg-green-100" />
-  <SummaryCard label="Low Stock" value={summary.lowStock} color="bg-yellow-100" />
-  <SummaryCard label="Expiring Soon" value={summary.expiringSoon} color="bg-red-100" />
-</div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <SummaryCard label="Total Products" value={summary.totalProducts} color="bg-blue-100" />
+        <SummaryCard label="Sales Today" value={`KES ${summary.totalSalesToday}`} color="bg-green-100" />
+        <SummaryCard label="Low Stock" value={summary.lowStock} color="bg-yellow-100" />
+        <SummaryCard label="Expiring Soon" value={summary.expiringSoon} color="bg-red-100" />
+      </div>
 
-
-      {/* Smart Alert */}
+      {/* Alert Banner */}
       {summary.lowStock > 0 && (
         <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6">
           ⚠️ {summary.lowStock} products are running low!
@@ -136,41 +136,32 @@ const Dashboard = () => {
         </ResponsiveContainer>
       </div>
 
-      {/* Recent Sales */}
-      // Replace summary cards grid with responsive columns
-<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-  <SummaryCard label="Total Products" value={summary.totalProducts} color="bg-blue-100" />
-  <SummaryCard label="Sales Today" value={`KES ${summary.totalSalesToday}`} color="bg-green-100" />
-  <SummaryCard label="Low Stock" value={summary.lowStock} color="bg-yellow-100" />
-  <SummaryCard label="Expiring Soon" value={summary.expiringSoon} color="bg-red-100" />
-</div>
+      {/* Recent Sales Table */}
+      <div className="bg-white rounded shadow p-4 mb-6 overflow-x-auto">
+        <h2 className="text-xl font-semibold mb-4">Recent Sales</h2>
+        <table className="min-w-full text-left text-sm md:text-base">
+          <thead>
+            <tr className="border-b">
+              <th className="py-2">Product</th>
+              <th>Qty</th>
+              <th>Amount</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody>
+            {recentSales.map((sale) => (
+              <tr key={sale.id} className="border-b hover:bg-gray-100">
+                <td className="py-2">{sale.product}</td>
+                <td>{sale.qty}</td>
+                <td>KES {sale.amount}</td>
+                <td>{sale.time}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
-// Recent sales table container
-<div className="bg-white rounded shadow p-4 mb-6 overflow-x-auto">
-  <h2 className="text-xl font-semibold mb-4">Recent Sales</h2>
-  <table className="min-w-full text-left text-sm md:text-base">
-    <thead>
-      <tr className="border-b">
-        <th className="py-2">Product</th>
-        <th>Qty</th>
-        <th>Amount</th>
-        <th>Time</th>
-      </tr>
-    </thead>
-    <tbody>
-      {recentSales.map((sale) => (
-        <tr key={sale.id} className="border-b hover:bg-gray-100">
-          <td className="py-2">{sale.product}</td>
-          <td>{sale.qty}</td>
-          <td>KES {sale.amount}</td>
-          <td>{sale.time}</td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
-</div>
-
-      {/* Feedback Section */}
+      {/* Help Section */}
       <div className="bg-gray-100 text-gray-700 p-4 rounded shadow">
         <h3 className="font-bold mb-1">Need Help?</h3>
         <p className="text-sm">

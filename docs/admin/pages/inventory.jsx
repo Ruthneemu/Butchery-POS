@@ -151,11 +151,11 @@ const Inventory = () => {
 
   return (
     <Layout>
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <h1 className="text-3xl font-bold text-red-700 mb-6">Butchery Inventory</h1>
+<div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
+      <h1 className="text-2xl sm:text-3xl font-bold text-red-700 mb-6">Butchery Inventory</h1>
 
       {/* Add Product Form */}
-      <form onSubmit={addProduct} className="mb-8 bg-white p-6 rounded shadow-md max-w-lg">
+     <form onSubmit={addProduct} className="mb-8 bg-white p-4 sm:p-6 rounded shadow-md max-w-lg w-full mx-auto">
         <h2 className="text-xl font-semibold mb-4">Add New Product</h2>
         {error && <p className="text-red-500 mb-3">{error}</p>}
 
@@ -241,7 +241,7 @@ const Inventory = () => {
       </form>
 
       {/* Inventory Table */}
-      <div className="overflow-x-auto bg-white rounded shadow-md">
+    <div className="overflow-x-auto bg-white rounded shadow-md w-full">
         {loading ? (
           <p className="p-4 text-gray-600">Loading products...</p>
         ) : products.length === 0 ? (
@@ -250,14 +250,14 @@ const Inventory = () => {
           <table className="min-w-full table-auto">
             <thead className="bg-red-700 text-white">
               <tr>
-                <th className="px-4 py-2 text-left">#</th>
-                <th className="px-4 py-2 text-left">Name</th>
-                <th className="px-4 py-2 text-left">Quantity</th>
-                <th className="px-4 py-2 text-left">Expiry Date</th>
-                <th className="px-4 py-2 text-left">Price</th>
-                <th className="px-4 py-2 text-left">Unit</th>
-                <th className="px-4 py-2 text-left">Selling Price</th>
-                <th className="px-4 py-2 text-left">Actions</th>
+                <th className="px-4 py-2 text-left text-sm">#</th>
+                <th className="px-4 py-2 text-left text-sm">Name</th>
+                <th className="px-4 py-2 text-left text-sm">Quantity</th>
+                <th className="px-4 py-2 text-left text-sm">Expiry Date</th>
+                <th className="px-4 py-2 text-left text-sm">Price</th>
+                <th className="px-4 py-2 text-left text-sm">Unit</th>
+                <th className="px-4 py-2 text-left text-sm">Selling Price</th>
+                <th className="px-4 py-2 text-left text-sm">Actions</th>
               </tr>
             </thead>
             <tbody>

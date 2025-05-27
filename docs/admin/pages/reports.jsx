@@ -118,7 +118,7 @@ const Reports = () => {
     <Layout>
     <div className="p-6 bg-gray-50 min-h-screen">
       <h1 className="text-3xl font-bold text-red-700 mb-6">Inventory Reports</h1>
-
+        <div className="w-full sm:w-auto">
       <div className="mb-6 flex flex-wrap gap-4 items-center">
         <div>
           <label className="block font-medium mb-1">Start Date</label>
@@ -129,7 +129,7 @@ const Reports = () => {
             onChange={(e) => setStartDate(e.target.value)}
           />
         </div>
-        <div>
+          <div className="w-full sm:w-auto">
           <label className="block font-medium mb-1">End Date</label>
           <input
             type="date"
@@ -177,10 +177,10 @@ const Reports = () => {
         <p>No data found.</p>
       ) : (
         <>
-          <div className="max-w-md mx-auto mb-8">
+          <div className="w-full max-w-full px-4 mb-8">
             <Pie data={pieData} />
           </div>
-
+          <div className="overflow-x-auto">
           <table className="min-w-full table-auto bg-white shadow-md rounded">
             <thead className="bg-red-700 text-white">
               <tr>
@@ -211,8 +211,10 @@ const Reports = () => {
               ))}
             </tbody>
           </table>
+          </div>
         </>
       )}
+      </div>
     </div>
     </Layout>
 

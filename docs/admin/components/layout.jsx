@@ -20,10 +20,10 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
   const breadcrumbs = location.pathname.split("/").filter(Boolean);
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-gray-50 overflow-x-hidden">
       {/* Sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-30 w-64 overflow-y-auto bg-white border-r shadow-md transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-30 w-64 overflow-y-auto bg-white border-r shadow-md transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 max-h-screen ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -33,7 +33,7 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
             <Link
               key={item.path}
               to={item.path}
-              className={`block px-4 py-2 rounded hover:bg-gray-100 ${
+              className={`block px-4 py-2 rounded hover:bg-gray-100 text-base md:text-sm ${
                 location.pathname === item.path ? "bg-gray-200 font-semibold" : ""
               }`}
               onClick={() => setSidebarOpen(false)}
@@ -41,6 +41,9 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
               {item.name}
             </Link>
           ))}
+          <div className="mt-6 px-4">
+            <LogoutButton />
+          </div>
         </nav>
       </div>
 
@@ -48,7 +51,7 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black opacity-30 z-20 md:hidden"
-          onClick={() => setSidebarOpen(false)}
+          onClick={() => setSidebarOpen(false)} aria-hidden="true"
         ></div>
       )}
 
@@ -59,7 +62,7 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
           <button
   onClick={() => setSidebarOpen(!sidebarOpen)}
   className="text-gray-700 focus:outline-none"
-  aria-label={sidebarOpen ? "Close menu" : "Open menu"}
+  aria-label={sidebarOpen ? "Close menu" : "Open menu"} aria-expanded={sidebarOpen}
 >
             <svg
               className="w-6 h-6"
