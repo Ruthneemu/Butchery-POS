@@ -13,6 +13,7 @@ import Reports from './pages/reports';
 import Sales from './pages/sales';
 import Settings from './pages/settings';
 import Login from './pages/login';
+import Layout from './components/layout';
 
 // Import Settings page
 
