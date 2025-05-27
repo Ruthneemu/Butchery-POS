@@ -106,12 +106,13 @@ const Dashboard = () => {
   return (
     <Layout title="Dashboard">
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <SummaryCard label="Total Products" value={summary.totalProducts} color="bg-blue-100" />
-        <SummaryCard label="Sales Today" value={`KES ${summary.totalSalesToday}`} color="bg-green-100" />
-        <SummaryCard label="Low Stock" value={summary.lowStock} color="bg-yellow-100" />
-        <SummaryCard label="Expiring Soon" value={summary.expiringSoon} color="bg-red-100" />
-      </div>
+     <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <SummaryCard label="Total Products" value={summary.totalProducts} color="bg-blue-100" />
+  <SummaryCard label="Sales Today" value={`KES ${summary.totalSalesToday}`} color="bg-green-100" />
+  <SummaryCard label="Low Stock" value={summary.lowStock} color="bg-yellow-100" />
+  <SummaryCard label="Expiring Soon" value={summary.expiringSoon} color="bg-red-100" />
+</div>
+
 
       {/* Smart Alert */}
       {summary.lowStock > 0 && (
@@ -136,29 +137,38 @@ const Dashboard = () => {
       </div>
 
       {/* Recent Sales */}
-      <div className="bg-white rounded shadow p-4 mb-6 overflow-x-auto">
-        <h2 className="text-xl font-semibold mb-4">Recent Sales</h2>
-        <table className="min-w-full text-left">
-          <thead>
-            <tr className="border-b">
-              <th className="py-2">Product</th>
-              <th>Qty</th>
-              <th>Amount</th>
-              <th>Time</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recentSales.map((sale) => (
-              <tr key={sale.id} className="border-b hover:bg-gray-100">
-                <td className="py-2">{sale.product}</td>
-                <td>{sale.qty}</td>
-                <td>KES {sale.amount}</td>
-                <td>{sale.time}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      // Replace summary cards grid with responsive columns
+<div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+  <SummaryCard label="Total Products" value={summary.totalProducts} color="bg-blue-100" />
+  <SummaryCard label="Sales Today" value={`KES ${summary.totalSalesToday}`} color="bg-green-100" />
+  <SummaryCard label="Low Stock" value={summary.lowStock} color="bg-yellow-100" />
+  <SummaryCard label="Expiring Soon" value={summary.expiringSoon} color="bg-red-100" />
+</div>
+
+// Recent sales table container
+<div className="bg-white rounded shadow p-4 mb-6 overflow-x-auto">
+  <h2 className="text-xl font-semibold mb-4">Recent Sales</h2>
+  <table className="min-w-full text-left text-sm md:text-base">
+    <thead>
+      <tr className="border-b">
+        <th className="py-2">Product</th>
+        <th>Qty</th>
+        <th>Amount</th>
+        <th>Time</th>
+      </tr>
+    </thead>
+    <tbody>
+      {recentSales.map((sale) => (
+        <tr key={sale.id} className="border-b hover:bg-gray-100">
+          <td className="py-2">{sale.product}</td>
+          <td>{sale.qty}</td>
+          <td>KES {sale.amount}</td>
+          <td>{sale.time}</td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+</div>
 
       {/* Feedback Section */}
       <div className="bg-gray-100 text-gray-700 p-4 rounded shadow">

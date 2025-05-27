@@ -57,9 +57,10 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
         {/* Mobile header */}
         <header className="flex items-center justify-between bg-white p-4 shadow-md md:hidden">
           <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="text-gray-700 focus:outline-none"
-          >
+  onClick={() => setSidebarOpen(!sidebarOpen)}
+  className="text-gray-700 focus:outline-none"
+  aria-label={sidebarOpen ? "Close menu" : "Open menu"}
+>
             <svg
               className="w-6 h-6"
               fill="none"
