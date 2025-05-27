@@ -11,7 +11,11 @@ import Dashboard from './pages/dashboard';
 import Inventory from './pages/inventory';
 import Reports from './pages/reports';
 import Sales from './pages/sales';
-import Settings from './pages/settings'; // Import Settings page
+import Settings from './pages/settings';
+import Login from './pages/login';
+
+// Import Settings page
+
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth()
