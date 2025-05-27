@@ -1,6 +1,8 @@
 // docs/admin/components/Layout.jsx
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
+import LogoutButton from '../LogoutButton'
+
 
 const navItems = [
   { name: "Dashboard", path: "/" },
