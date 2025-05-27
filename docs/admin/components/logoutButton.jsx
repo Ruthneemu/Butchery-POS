@@ -1,6 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from "../supabaseClient";
+import Layout from "../components/layout";
+
 
 const LogoutButton = () => {
   const navigate = useNavigate();
