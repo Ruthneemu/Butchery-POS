@@ -33,46 +33,11 @@ const App = () => {
     <Router>
       <Routes>
       <Route path="/login" element={<Login />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Layout><Dashboard /></Layout>
-            </ProtectedRoute>
-          }
-        />
-       <Route
-          path="/inventory"
-          element={
-            <ProtectedRoute>
-              <Layout><Inventory /></Layout>
-            </ProtectedRoute>
-          }
-        />
-        <Route 
-        path="/reports"
-        element={
-          <protectedRoute>
-            <Layout><Reports /></Layout>
-          </protectedRoute>
-        }
-        />
-         <Route
-          path="/sales"
-          element={
-            <ProtectedRoute>
-              <Layout><Sales /></Layout>
-            </ProtectedRoute>       
-          }
-          />
-          <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
-              <Layout><Settings /></Layout>
-            </ProtectedRoute>
-          }
-          />
+        <Route path="/" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+  <Route path="/inventory" element={<ProtectedRoute><Inventory /></ProtectedRoute>} />
+  <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
+  <Route path="/sales" element={<ProtectedRoute><Sales /></ProtectedRoute>} />
+  <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         {/* Add more routes as needed */}
        
       </Routes>
