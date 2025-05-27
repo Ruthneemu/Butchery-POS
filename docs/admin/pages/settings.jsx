@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import  supabase  from '../supabaseClient';
 import Layout from "../components/layout";
 
 export default function Settings() {
