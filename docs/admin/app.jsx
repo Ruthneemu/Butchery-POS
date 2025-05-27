@@ -4,7 +4,8 @@ import './src/style.css'; // ensure correct path to Tailwind CSS
 import {
   BrowserRouter as Router,
   Routes,
-  Route 
+  Route, 
+  Navigate 
 } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth'
 import Dashboard from './pages/dashboard';
