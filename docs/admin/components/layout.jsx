@@ -1,7 +1,7 @@
 // docs/admin/components/Layout.jsx
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
-import LogoutButton from './logoutButton'
+import LogoutButton from './logoutButton';
 
 
 const navItems = [
