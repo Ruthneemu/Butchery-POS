@@ -26,7 +26,7 @@ export default function Login() {
   return (
     <div
       className="flex items-center justify-center min-h-screen w-full bg-cover bg-center bg-no-repeat px-4"
-      style={{ backgroundImage: "url('/leaf.jpg')" }}
+      style={{ backgroundImage: "url('/leaf.jpg')" }} // ✅ Image must be in /public/leaf.jpg
     >
       <div className="bg-white bg-opacity-90 backdrop-blur-md p-8 rounded-2xl shadow-xl w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl transition-all duration-300">
         <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">Login</h2>
