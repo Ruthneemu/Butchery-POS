@@ -1,46 +1,35 @@
 import { useState } from 'react';
+import supabase from '../supabaseClient';
 
-export default function Register() {
+export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
 
-  const handleRegister = async () => {
+  const handleLogin = async () => {
     setMessage(null);
-
-    if (password !== confirmPassword) {
-      setMessage({ type: 'error', text: "Passwords don't match" });
-      return;
-    }
-
-    if (password.length < 6) {
-      setMessage({ type: 'error', text: "Password must be at least 6 characters" });
-      return;
-    }
-
     setLoading(true);
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
 
     if (error) {
       setMessage({ type: 'error', text: error.message });
     } else {
-      setMessage({ type: 'success', text: 'Registration successful! Please check your email to confirm.' });
-      setEmail('');
-      setPassword('');
-      setConfirmPassword('');
+      setMessage({ type: 'success', text: 'Login successful! Redirecting...' });
+      setTimeout(() => {
+        window.location.href = '/dashboard';
+      }, 1000);
     }
   };
 
   return (
     <div
-      className="flex items-center justify-center min-h-screen bg-cover bg-center bg-no-repeat px-4 py-8"
+      className="flex items-center justify-center min-h-screen w-full bg-cover bg-center bg-no-repeat px-4"
       style={{ backgroundImage: "url('/leaf.jpg')" }}
     >
-      <div className="bg-white bg-opacity-90 backdrop-blur-md rounded-2xl shadow-lg w-full max-w-md p-6 sm:p-8">
-        <h2 className="text-3xl font-bold text-center text-gray-800 mb-6">Create Account</h2>
+      <div className="bg-white bg-opacity-90 backdrop-blur-md p-8 rounded-2xl shadow-xl w-full max-w-sm sm:max-w-md md:max-w-lg lg:max-w-xl transition-all duration-300">
+        <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">Login</h2>
 
         {message && (
           <div
@@ -57,42 +46,33 @@ export default function Register() {
           placeholder="Email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          className="w-full p-4 mb-4 border border-gray-300 rounded-lg text-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="w-full p-4 text-lg mb-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
         <input
           type="password"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
-          className="w-full p-4 mb-4 border border-gray-300 rounded-lg text-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          className="w-full p-4 text-lg mb-6 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
         />
-        <input
-          type="password"
-          placeholder="Confirm Password"
-          value={confirmPassword}
-          onChange={(e) => setConfirmPassword(e.target.value)}
-          className="w-full p-4 mb-6 border border-gray-300 rounded-lg text-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-        />
-
         <button
-          onClick={handleRegister}
+          onClick={handleLogin}
           disabled={loading}
-          className={`w-full text-white py-3 text-lg rounded-lg font-semibold transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 ${
+          className={`w-full text-white text-lg py-3 rounded-lg font-semibold shadow-md transition-transform transform hover:scale-105 focus:outline-none focus:ring-2 ${
             loading
               ? 'bg-blue-400 cursor-not-allowed'
               : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 focus:ring-blue-500'
           }`}
         >
-          {loading ? 'Registering...' : 'Register'}
+          {loading ? 'Logging in...' : 'Login'}
         </button>
 
         <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600 mb-2">Already have an account?</p>
           <button
-            onClick={() => window.location.href = "/settings"}
-            className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2 px-6 rounded-lg transition"
+            onClick={() => (window.location.href = '/register')}
+            className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-medium px-4 py-2 rounded-lg text-sm transition duration-200"
           >
-            Login
+            Don't have an account? Register
           </button>
         </div>
       </div>
