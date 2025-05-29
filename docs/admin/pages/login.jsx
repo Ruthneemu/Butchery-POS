@@ -25,10 +25,10 @@ export default function Login() {
 
   return (
     <div
-      className="flex flex-col justify-center items-center min-h-screen w-full bg-cover bg-center bg-no-repeat px-6 sm:px-8"
+      className="flex flex-col justify-center items-center min-h-screen w-full bg-cover bg-center bg-no-repeat px-4 sm:px-6 md:px-8 overflow-auto"
       style={{ backgroundImage: "url('/leaf.jpg')" }} // image in /public/leaf.jpg
     >
-      <div className="bg-white bg-opacity-90 backdrop-blur-md p-6 sm:p-8 rounded-2xl shadow-xl w-full max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg transition-all duration-300">
+      <div className="bg-white bg-opacity-90 backdrop-blur-md p-5 sm:p-8 rounded-2xl shadow-xl w-full max-w-xs sm:max-w-sm md:max-w-md lg:max-w-lg transition-all duration-300">
         <h2 className="text-2xl sm:text-3xl font-bold mb-6 text-center text-gray-800">Login</h2>
 
         {message && (
@@ -47,6 +47,8 @@ export default function Login() {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           className="w-full p-3 text-base mb-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          autoComplete="email"
+          inputMode="email"
         />
         <input
           type="password"
@@ -54,6 +56,7 @@ export default function Login() {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           className="w-full p-3 text-base mb-5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
+          autoComplete="current-password"
         />
         <button
           onClick={handleLogin}
