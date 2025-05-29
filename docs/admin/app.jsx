@@ -39,8 +39,10 @@ const App = () => {
   <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
   <Route path="/sales" element={<ProtectedRoute><Sales /></ProtectedRoute>} />
   <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-  <Route path="/register" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-        {/* Add more routes as needed */}
+  <Route path="/register" element={<Register />} />
+        <Route path="/layout" element={<Layout />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+cc        {/* Add more routes as needed */}
        
       </Routes>
     </Router>
