@@ -71,11 +71,11 @@ export default function Login() {
         </button>
 
         <div className="mt-5 text-center">
-          <button
+          <p>Don't have an account?</p><button
             onClick={() => (window.location.href = '/register')}
             className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-medium px-4 py-2 rounded-lg text-sm transition duration-200"
           >
-            Don't have an account? Register
+             Register
           </button>
         </div>
       </div>

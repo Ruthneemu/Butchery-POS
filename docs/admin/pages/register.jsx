@@ -84,11 +84,12 @@ export default function Register() {
         </button>
 
         <div className="mt-6 flex flex-col items-center gap-3">
+          <p>Already have an account?</p>
           <button
             onClick={() => navigate('/login')}
             className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 py-2 px-4 rounded-lg text-sm font-medium transition"
           >
-            Already have an account? Login
+             Login
           </button>
         </div>
       </div>
