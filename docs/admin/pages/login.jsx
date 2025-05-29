@@ -23,7 +23,7 @@ const Login = () => {
     <div className="flex items-center justify-center min-h-screen bg-gray-100 px-4">
       <form onSubmit={handleLogin} className="bg-white w-full max-w-sm p-6 md:p-8 rounded-xl shadow-md">
 
-        <h2 className="text-2xl mb-4 text-center">Admin Login</h2>
+        <h2 className="text-xl sm:text-2xl font-semibold mb-6 text-center">Admin Login</h2>
 {error && <p className="text-red-500 text-sm mb-4">{error}</p>}
         <input
           type="email"
@@ -31,16 +31,16 @@ const Login = () => {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
- className="w-full p-3 mb-4 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400"        />
+ className="w-full p-3 mb-5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400 transition"        />
         <input
           type="password"
           placeholder="Password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          className="w-full p-2 mb-3 border rounded"
+          className="w-full p-3 mb-6 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-400 transition"
         />
-        <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-md transition duration-200">Login</button>
+        <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-md text-base font-medium transition duration-200">Login</button>
       </form>
     </div>
   )

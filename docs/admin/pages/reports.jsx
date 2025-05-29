@@ -120,7 +120,7 @@ const Reports = () => {
       <h1 className="text-3xl font-bold text-red-700 mb-6">Inventory Reports</h1>
         <div className="w-full sm:w-auto">
       <div className="mb-6 flex flex-wrap gap-4 items-center">
-        <div>
+        <div className="w-full sm:w-auto">
           <label className="block font-medium mb-1">Start Date</label>
           <input
             type="date"
@@ -156,7 +156,7 @@ const Reports = () => {
         </button>
       </div>
 
-      <div className="mb-6 flex gap-4">
+      <div className="mb-6 flex flex-wrap gap-4">
         <button
           onClick={exportToCSV}
           className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
@@ -181,7 +181,7 @@ const Reports = () => {
             <Pie data={pieData} />
           </div>
           <div className="overflow-x-auto">
-          <table className="min-w-full table-auto bg-white shadow-md rounded">
+          <table className="min-w-[600px] table-auto bg-white shadow-md rounded">
             <thead className="bg-red-700 text-white">
               <tr>
                 <th className="px-4 py-2 text-left">#</th>

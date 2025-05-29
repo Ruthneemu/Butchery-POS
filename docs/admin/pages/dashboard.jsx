@@ -125,7 +125,8 @@ const Dashboard = () => {
       {/* Sales Trend Chart */}
       <div className="bg-white p-4 rounded shadow mb-6">
         <h2 className="text-lg font-semibold mb-4">Sales Trend (Last 7 Days)</h2>
-        <ResponsiveContainer width="100%" height={300}>
+        <div className="w-full h-[250px] sm:h-[300px]">
+        <ResponsiveContainer width="100%" height="100%">
           <LineChart data={salesTrend}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis dataKey="day" />
@@ -135,11 +136,12 @@ const Dashboard = () => {
           </LineChart>
         </ResponsiveContainer>
       </div>
+      </div>
 
       {/* Recent Sales Table */}
       <div className="bg-white rounded shadow p-4 mb-6 overflow-x-auto">
         <h2 className="text-xl font-semibold mb-4">Recent Sales</h2>
-        <table className="min-w-full text-left text-sm md:text-base">
+        <table className="min-w-[500px] w-full text-left text-sm sm:text-base">
           <thead>
             <tr className="border-b">
               <th className="py-2">Product</th>
@@ -162,7 +164,7 @@ const Dashboard = () => {
       </div>
 
       {/* Help Section */}
-      <div className="bg-gray-100 text-gray-700 p-4 rounded shadow">
+      <div className="bg-gray-100 text-gray-700 p-4 rounded shadow text-sm sm:text-base">
         <h3 className="font-bold mb-1">Need Help?</h3>
         <p className="text-sm">
           📞 Call: +254 712 345 678 <br />

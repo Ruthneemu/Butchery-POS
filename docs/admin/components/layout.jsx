@@ -20,7 +20,7 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
   const breadcrumbs = location.pathname.split("/").filter(Boolean);
 
   return (
-    <div className="flex min-h-screen bg-gray-50 overflow-x-hidden">
+    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50 overflow-x-hidden">
       {/* Sidebar */}
       <div
         className={`fixed inset-y-0 left-0 z-30 w-64 overflow-y-auto bg-white border-r shadow-md transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 max-h-screen ${
@@ -56,7 +56,7 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
       )}
 
       {/* Main content */}
-      <div className="flex-1 flex flex-col min-h-screen ml-0 md:ml-64">
+      <div className="flex-1 flex flex-col">
         {/* Mobile header */}
         <header className="flex items-center justify-between bg-white p-4 shadow-md md:hidden">
           <button
@@ -81,7 +81,7 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
             </svg>
           </button>
           <h1 className="text-xl font-bold">{title}</h1>
-          <div></div>
+        
         </header>
 
         {/* Breadcrumb */}

@@ -151,15 +151,15 @@ const Inventory = () => {
 
   return (
     <Layout>
-<div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
+<div className="p-4 sm:p-6 bg-gray-50 min-h-screen w-full">
       <h1 className="text-2xl sm:text-3xl font-bold text-red-700 mb-6">Butchery Inventory</h1>
 
       {/* Add Product Form */}
-     <form onSubmit={addProduct} className="mb-8 bg-white p-4 sm:p-6 rounded shadow-md max-w-lg w-full mx-auto">
-        <h2 className="text-xl font-semibold mb-4">Add New Product</h2>
-        {error && <p className="text-red-500 mb-3">{error}</p>}
-
-        <div className="mb-4">
+     <form onSubmit={addProduct} className="mb-8 bg-white p-4 sm:p-6 rounded shadow-md w-full max-w-2xl mx-auto space-y-4">
+        <h2 className="text-xl font-semibold">Add New Product</h2>
+        {error && <p className="text-red-500">{error}</p>}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
           <label className="block mb-1 font-medium">Product Name</label>
           <input
             type="text"
@@ -170,7 +170,7 @@ const Inventory = () => {
           />
         </div>
 
-        <div className="mb-4">
+        <div>
           <label className="block mb-1 font-medium">Quantity (kg or units)</label>
           <input
             type="number"
@@ -182,7 +182,7 @@ const Inventory = () => {
           />
         </div>
 
-        <div className="mb-4">
+        <div>
           <label className="block mb-1 font-medium">Expiry Date</label>
           <input
             type="date"
@@ -192,7 +192,7 @@ const Inventory = () => {
           />
         </div>
 
-        <div className="mb-4">
+        <div>
           <label className="block mb-1 font-medium">Price (KSh)</label>
           <input
             type="number"
@@ -204,7 +204,7 @@ const Inventory = () => {
           />
         </div>
         
-        <div className="mb-4">
+        <div>
   <label className="block mb-1 font-medium">Selling Price (KSh)</label>
   <input
     type="number"
@@ -217,7 +217,7 @@ const Inventory = () => {
   />
 </div>
 
-        <div className="mb-4">
+        <div>
           <label className="block mb-1 font-medium">Unit</label>
           <select
             className="w-full border border-gray-300 rounded px-3 py-2"
@@ -230,6 +230,7 @@ const Inventory = () => {
             <option value="pack">pack</option>
             {/* Add more units as needed */}
           </select>
+        </div>
         </div>
 
         <button
