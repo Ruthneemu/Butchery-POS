@@ -34,7 +34,7 @@ const Dashboard = () => {
 
     const totalSalesToday = sales
       .filter((s) => new Date(s.created_at).toDateString() === now.toDateString())
-      .reduce((acc, s) => acc + s.total_amount, 0);
+      .reduce((acc, s) => acc + s.total, 0);
 
     const trendMap = {};
     for (let i = 6; i >= 0; i--) {
@@ -47,7 +47,7 @@ const Dashboard = () => {
     sales.forEach((s) => {
       const d = new Date(s.created_at).toDateString();
       if (trendMap[d] !== undefined) {
-        trendMap[d] += s.total_amount;
+        trendMap[d] += s.total;
       }
     });
 
@@ -58,9 +58,9 @@ const Dashboard = () => {
 
     const recent = sales.slice(0, 5).map((s) => ({
       id: s.id,
-      product: s.product_name,
+      product: s.item_name,
       qty: s.quantity,
-      amount: s.total_amount,
+      amount: s.total,
       time: new Date(s.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
     }));
 
