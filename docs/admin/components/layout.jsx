@@ -23,7 +23,7 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
     <div className="flex flex-col md:flex-row min-h-screen bg-gray-50 overflow-x-hidden">
       {/* Sidebar */}
       <div
-        className={`fixed inset-y-0 left-0 z-30 w-64 overflow-y-auto bg-white border-r shadow-md transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 max-h-screen ${
+        className={`fixed top-0 left-0 z-30 w-64 h-full bg-white border-r shadow-md transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -105,7 +105,7 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
         </div>
 
         {/* Page content */}
-        <main className="p-6">{children}</main>
+        <main className="p-6 flex-1 min-h-[calc(100vh-4rem)] overflow-auto">{children}</main>
       </div>
     </div>
   );

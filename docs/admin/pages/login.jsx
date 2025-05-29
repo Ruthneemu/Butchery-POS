@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import  supabase  from '../supabaseClient'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import Layout from "../components/layout";
 
 const Login = () => {
@@ -42,6 +42,12 @@ const Login = () => {
         />
         <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-md text-base font-medium transition duration-200">Login</button>
       </form>
+      <p className="text-center text-sm text-gray-600 mt-4">
+          New here?{' '}
+          <Link to="/register" className="text-blue-600 font-medium hover:underline">
+            Register
+          </Link>
+        </p>
     </div>
   )
 }

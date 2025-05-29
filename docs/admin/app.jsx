@@ -12,6 +12,7 @@ import Dashboard from './pages/dashboard';
 import Inventory from './pages/inventory';
 import Reports from './pages/reports';
 import Sales from './pages/sales';
+import Register from '.pages/register'; 
 import Settings from './pages/settings';
 import Login from './pages/login';
 import Layout from './components/layout';
@@ -38,6 +39,7 @@ const App = () => {
   <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
   <Route path="/sales" element={<ProtectedRoute><Sales /></ProtectedRoute>} />
   <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
+  <Route path="/register" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
         {/* Add more routes as needed */}
        
       </Routes>
