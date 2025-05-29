@@ -12,7 +12,7 @@ import Dashboard from './pages/dashboard';
 import Inventory from './pages/inventory';
 import Reports from './pages/reports';
 import Sales from './pages/sales';
-import Register from '.pages/register'; 
+import Register from './pages/register';
 import Settings from './pages/settings';
 import Login from './pages/login';
 import Layout from './components/layout';
