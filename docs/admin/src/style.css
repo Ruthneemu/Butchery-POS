@@ -1,6 +1,7 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
 /* Ensure full height for html, body, and root container for proper flex height calculation */
 html, body, #root {
   height: 100%;
