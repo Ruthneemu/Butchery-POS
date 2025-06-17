@@ -23,8 +23,7 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar */}
       <div
-        className={`z-30 w-64 bg-white border-r shadow-md 
-    fixed h-full transform transition-transform duration-200 ease-in-out 
+        className={`z-30 w-64 bg-white border-r shadow-md fixed h-full overflow-y-auto transform transition-transform duration-200 ease-in-out 
     md:relative md:translate-x-0
     ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
