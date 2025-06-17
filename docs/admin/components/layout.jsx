@@ -23,8 +23,10 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
     <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar */}
       <div
-        className={`fixed top-0 left-0 z-30 w-64 h-full bg-white border-r shadow-md transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 ${
-    sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        className={`z-30 w-64 bg-white border-r shadow-md 
+    fixed h-full transform transition-transform duration-200 ease-in-out 
+    md:relative md:translate-x-0
+    ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="p-4 text-2xl font-bold border-b">Butchee Admin</div>
