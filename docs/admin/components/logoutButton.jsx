@@ -8,8 +8,13 @@ const LogoutButton = () => {
   const navigate = useNavigate();
 
   const handleLogout = async () => {
-      console.log('Current Supabase session:', supabase.auth.session()); // Add this line
-      const { error } = await supabase.auth.signOut();
+const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+if (sessionError) {
+  console.error("Error getting session:", sessionError.message);
+} else {
+  console.log("Current Supabase session:", session);
+}     
+    const { error } = await supabase.auth.signOut();
       if (error) {
         console.error('Logout error:', error.message);
       } else {
