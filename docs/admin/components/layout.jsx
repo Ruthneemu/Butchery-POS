@@ -20,11 +20,11 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
   const breadcrumbs = location.pathname.split("/").filter(Boolean);
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-gray-50 overflow-x-hidden">
+    <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar */}
       <div
         className={`fixed top-0 left-0 z-30 w-64 h-full bg-white border-r shadow-md transform transition-transform duration-200 ease-in-out md:relative md:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+    sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="p-4 text-2xl font-bold border-b">Butchee Admin</div>
