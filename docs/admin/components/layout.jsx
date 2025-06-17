@@ -3,7 +3,6 @@ import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import LogoutButton from './logoutButton';
 
-
 const navItems = [
   { name: "Dashboard", path: "/" },
   { name: "Inventory", path: "/inventory" },
@@ -24,9 +23,8 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
       {/* Sidebar */}
       <div
         className={`z-30 w-64 bg-white border-r shadow-md fixed h-full overflow-y-auto transform transition-transform duration-200 ease-in-out 
-    md:relative md:translate-x-0
-    ${sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+          md:relative md:translate-x-0
+          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
       >
         <div className="p-4 text-2xl font-bold border-b">Butchee Admin</div>
         <nav className="p-4 space-y-2">
@@ -61,10 +59,10 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
         {/* Mobile header */}
         <header className="flex items-center justify-between bg-white p-4 shadow-md md:hidden">
           <button
-  onClick={() => setSidebarOpen(!sidebarOpen)}
-  className="text-gray-700 focus:outline-none"
-  aria-label={sidebarOpen ? "Close menu" : "Open menu"} aria-expanded={sidebarOpen}
->
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="text-gray-700 focus:outline-none"
+            aria-label={sidebarOpen ? "Close menu" : "Open menu"} aria-expanded={sidebarOpen}
+          >
             <svg
               className="w-6 h-6"
               fill="none"
@@ -82,7 +80,6 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
             </svg>
           </button>
           <h1 className="text-xl font-bold">{title}</h1>
-        
         </header>
 
         {/* Breadcrumb */}
