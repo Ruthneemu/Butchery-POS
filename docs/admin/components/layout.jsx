@@ -1,4 +1,3 @@
-// docs/admin/components/Layout.jsx
 import React, { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import LogoutButton from './logoutButton';
@@ -19,12 +18,12 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
   const breadcrumbs = location.pathname.split("/").filter(Boolean);
 
   return (
-<div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen bg-gray-50">
       {/* Sidebar */}
-      <div
-        className={`z-30 w-64 bg-white border-r shadow-md fixed h-full overflow-y-auto transform transition-transform duration-200 ease-in-out 
-          md:relative md:translate-x-0
-          ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}
+      <aside
+        className={`fixed inset-y-0 left-0 z-30 w-64 bg-white border-r shadow-md transform transition-transform duration-200 ease-in-out overflow-y-auto ${
+          sidebarOpen ? "translate-x-0" : "-translate-x-full"
+        } md:translate-x-0`}
       >
         <div className="p-4 text-2xl font-bold border-b">Butchee Admin</div>
         <nav className="p-4 space-y-2">
@@ -44,24 +43,28 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
             <LogoutButton />
           </div>
         </nav>
-      </div>
+      </aside>
 
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black opacity-30 z-20 md:hidden"
-          onClick={() => setSidebarOpen(false)} aria-hidden="true"
-        ></div>
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
       )}
 
       {/* Main content */}
-  <div className="flex-1 flex flex-col">
+      <div className={`flex-1 flex flex-col transition-all duration-200 ${
+        sidebarOpen ? "md:ml-64" : "md:ml-0"
+      }`}>
         {/* Mobile header */}
         <header className="flex items-center justify-between bg-white p-4 shadow-md md:hidden">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className="text-gray-700 focus:outline-none"
-            aria-label={sidebarOpen ? "Close menu" : "Open menu"} aria-expanded={sidebarOpen}
+            aria-label={sidebarOpen ? "Close menu" : "Open menu"}
+            aria-expanded={sidebarOpen}
           >
             <svg
               className="w-6 h-6"
@@ -83,7 +86,7 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
         </header>
 
         {/* Breadcrumb */}
-        <div className="p-4 text-sm text-gray-600 bg-gray-100 border-b">
+        <div className="p-4 text-sm text-gray-600 bg-gray-100 border-b whitespace-nowrap overflow-x-auto">
           <nav className="flex space-x-2">
             <Link to="/" className="hover:underline text-blue-600">
               Dashboard
@@ -103,7 +106,9 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
         </div>
 
         {/* Page content */}
-        <main className="p-6 flex-1 min-h-[calc(100vh-4rem)] overflow-auto">{children}</main>
+        <main className="p-6 flex-1 min-h-screen overflow-auto">
+          {children}
+        </main>
       </div>
     </div>
   );
