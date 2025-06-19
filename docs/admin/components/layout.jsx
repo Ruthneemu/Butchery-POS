@@ -19,19 +19,22 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* Sidebar */}
+      {/* Sidebar - Updated with better spacing */}
       <aside
-        className={`fixed inset-y-0 left-0 z-30 w-64 bg-white border-r shadow-md transform transition-transform duration-200 ease-in-out overflow-y-auto ${
+        className={`fixed inset-y-0 left-0 z-30 flex flex-col w-64 bg-white border-r shadow-md transform transition-transform duration-200 ease-in-out ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         } md:translate-x-0`}
       >
-        <div className="p-4 text-2xl font-bold border-b">Butchee Admin</div>
-        <nav className="p-4 space-y-2">
+        {/* Sidebar Header with more padding */}
+        <div className="p-6 text-2xl font-bold border-b">Butchee Admin</div>
+        
+        {/* Navigation with better spacing */}
+        <nav className="flex-1 px-4 py-6 space-y-3 overflow-y-auto">
           {navItems.map((item) => (
             <Link
               key={item.path}
               to={item.path}
-              className={`block px-4 py-2 rounded hover:bg-gray-100 text-base md:text-sm ${
+              className={`block px-4 py-3 rounded-lg hover:bg-gray-100 text-base transition-colors duration-200 ${
                 location.pathname === item.path ? "bg-gray-200 font-semibold" : ""
               }`}
               onClick={() => setSidebarOpen(false)}
@@ -39,10 +42,12 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
               {item.name}
             </Link>
           ))}
-          <div className="mt-6 px-4">
-            <LogoutButton />
-          </div>
         </nav>
+        
+        {/* Footer with more padding */}
+        <div className="p-6 border-t">
+          <LogoutButton className="w-full" />
+        </div>
       </aside>
 
       {/* Mobile overlay */}
