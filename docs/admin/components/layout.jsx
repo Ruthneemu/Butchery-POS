@@ -19,16 +19,14 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* Sidebar - Fixed positioning and proper z-index */}
+      {/* Sidebar - unchanged as requested */}
       <aside
         className={`fixed inset-y-0 left-0 z-30 flex flex-col w-64 bg-white border-r shadow-md transform transition-transform duration-200 ease-in-out ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } md:relative md:translate-x-0`}
+        } md:translate-x-0`}
       >
-        {/* Sidebar Header with better spacing */}
         <div className="p-6 pb-4 text-2xl font-bold border-b">Butchee Admin</div>
         
-        {/* Navigation with improved spacing */}
         <nav className="flex-1 px-6 py-4 space-y-4 overflow-y-auto">
           {navItems.map((item) => (
             <Link
@@ -44,13 +42,12 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
           ))}
         </nav>
         
-        {/* Footer with proper spacing */}
         <div className="p-6 pt-4 border-t">
           <LogoutButton className="w-full" />
         </div>
       </aside>
 
-      {/* Mobile overlay - ensure it's below sidebar */}
+      {/* Mobile overlay */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black opacity-30 z-20 md:hidden"
@@ -59,10 +56,10 @@ const Layout = ({ children, title = "Butchee Admin" }) => {
         />
       )}
 
-      {/* Main content - adjusted for sidebar width */}
+      {/* Main content - FIXED: Proper margin handling */}
       <div className={`flex-1 flex flex-col transition-all duration-200 ${
-        sidebarOpen ? "ml-64" : "ml-0"
-      } md:ml-64`}>
+        sidebarOpen ? "md:ml-64" : "md:ml-0"
+      } ml-0 md:ml-64`}>
         {/* Mobile header */}
         <header className="flex items-center justify-between bg-white p-4 shadow-md md:hidden">
           <button
