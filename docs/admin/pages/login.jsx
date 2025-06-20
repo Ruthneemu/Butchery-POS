@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import supabase from '../supabaseClient';
-import { useRouter } from 'next/router';
+import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -11,7 +11,7 @@ export default function Login() {
   const [message, setMessage] = useState(null);
   const [mode, setMode] = useState('login'); // 'login' | 'reset' | 'update'
 
-  const router = useRouter();
+  const navigate = useNavigate();
 
   // Check for password recovery token in URL
   useEffect(() => {
@@ -26,7 +26,7 @@ export default function Login() {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setLoading(false);
     if (error) setMessage({ type: 'error', text: error.message });
-    else router.push('/dashboard');
+    else navigate('/dashboard');
   };
 
   const handlePasswordReset = async () => {
@@ -55,7 +55,7 @@ export default function Login() {
     if (error) setMessage({ type: 'error', text: error.message });
     else {
       setMessage({ type: 'success', text: 'Password updated!' });
-      router.push('/dashboard');
+      navigate('/dashboard');
     }
   };
 
