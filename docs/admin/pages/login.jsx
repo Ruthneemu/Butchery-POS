@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import supabase from '../supabaseClient';
+import { useRouter } from 'next/router';
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -7,6 +8,27 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const router = useRouter();
+
+  // Check for password recovery token on component mount
+  useEffect(() => {
+    const handleHashChange = () => {
+      const { hash } = window.location;
+      if (hash.includes('type=recovery')) {
+        // Extract the token from the URL
+        const accessToken = hash.split('access_token=')[1].split('&')[0];
+        // Redirect to update-password with the token
+        router.push(`/update-password#access_token=${accessToken}`);
+      }
+    };
+
+    // Check immediately on mount
+    handleHashChange();
+
+    // Also listen for hash changes (in case it loads slowly)
+    window.addEventListener('hashchange', handleHashChange);
+    return () => window.removeEventListener('hashchange', handleHashChange);
+  }, [router]);
 
   const handleLogin = async () => {
     setMessage(null);
@@ -42,7 +64,9 @@ export default function Login() {
     }
 
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/update-password`,
+    });
     setLoading(false);
 
     if (error) {
