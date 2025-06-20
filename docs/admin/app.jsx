@@ -15,7 +15,6 @@ import Sales from './pages/sales';
 import Register from './pages/register';
 import Settings from './pages/settings';
 import Login from './pages/login';
-import UpdatePassword from './pages/update-password'
 import Layout from './components/layout';
 
 // Import Settings page
@@ -40,7 +39,6 @@ const App = () => {
   <Route path="/reports" element={<ProtectedRoute><Reports /></ProtectedRoute>} />
   <Route path="/sales" element={<ProtectedRoute><Sales /></ProtectedRoute>} />
   <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
-  <Route path="/update-password" element={<UpdatePassword />} />
   <Route path="/register" element={<Register />} />
         <Route path="/layout" element={<Layout />} />
         <Route path="*" element={<Navigate to="/" replace />} />
