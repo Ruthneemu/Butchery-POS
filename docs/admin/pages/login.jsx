@@ -14,18 +14,19 @@ export default function Login() {
 
   const navigate = useNavigate();
 
-  // Check for password recovery
   useEffect(() => {
-    // Check URL hash for password reset
-    const { hash } = window.location;
-    if (hash.includes('#update-password') || hash.includes('type=recovery')) {
+    const url = new URL(window.location.href);
+    const hash = url.hash;
+    const type = url.searchParams.get('type');
+
+    if (hash.includes('update-password') || type === 'recovery') {
       setMode('update');
-      // Clean up the URL
       window.history.replaceState({}, document.title, window.location.pathname);
     }
+  }, []);
 
-    // Listen for auth state changes
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event) => {
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
       if (event === 'PASSWORD_RECOVERY') {
         setMode('update');
       }
@@ -36,7 +37,6 @@ export default function Login() {
     };
   }, []);
 
-  // Password strength indicator
   useEffect(() => {
     if (newPassword.length === 0) {
       setPasswordStrength(0);
@@ -45,7 +45,6 @@ export default function Login() {
     } else if (newPassword.length < 10) {
       setPasswordStrength(2);
     } else {
-      // Check for special characters and numbers
       const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(newPassword);
       const hasNumber = /[0-9]/.test(newPassword);
       setPasswordStrength(hasSpecialChar && hasNumber ? 4 : 3);
@@ -63,11 +62,15 @@ export default function Login() {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-    });
-    setLoading(false);
-    if (error) setMessage({ type: 'error', text: error.message });
+    setMessage(null);
+    try {
+      const { error } = await supabase.auth.signInWithOAuth({ provider: 'google' });
+      if (error) throw error;
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handlePasswordReset = async () => {
@@ -76,18 +79,17 @@ export default function Login() {
       setMessage({ type: 'error', text: 'Please enter a valid email address' });
       return;
     }
-    
+
     setMessage(null);
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/login#update-password`
       });
-      
       if (error) throw error;
-      setMessage({ 
-        type: 'success', 
-        text: 'Password reset link sent to your email! Please check your inbox.' 
+      setMessage({
+        type: 'success',
+        text: 'Password reset link sent to your email! Please check your inbox.'
       });
     } catch (error) {
       setMessage({ type: 'error', text: error.message });
@@ -105,17 +107,16 @@ export default function Login() {
       setMessage({ type: 'error', text: 'Password should be at least 6 characters' });
       return;
     }
-    
+
     setMessage(null);
     setLoading(true);
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
-      setMessage({ 
-        type: 'success', 
-        text: 'Password updated successfully! Redirecting to login...' 
+      setMessage({
+        type: 'success',
+        text: 'Password updated successfully! Redirecting to login...'
       });
-      
       setTimeout(() => {
         setNewPassword('');
         setConfirmPassword('');
@@ -165,9 +166,7 @@ export default function Login() {
                 onClick={handleLogin}
                 disabled={loading}
                 className={`w-full text-white py-3 rounded-lg font-semibold ${
-                  loading
-                    ? 'bg-blue-400 cursor-not-allowed'
-                    : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
+                  loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
                 }`}
               >
                 {loading ? 'Logging in...' : 'Login'}
@@ -231,9 +230,7 @@ export default function Login() {
               onClick={handlePasswordReset}
               disabled={loading}
               className={`w-full text-white py-3 rounded-lg font-semibold ${
-                loading
-                  ? 'bg-blue-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
+                loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
               }`}
             >
               {loading ? 'Sending...' : 'Send Reset Link'}
@@ -259,13 +256,13 @@ export default function Login() {
               autoFocus
             />
             <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
-              <div 
+              <div
                 className={`h-2.5 rounded-full ${
                   passwordStrength === 0 ? 'bg-gray-200' :
                   passwordStrength === 1 ? 'bg-red-500' :
-                  passwordStrength === 2 ? 'bg-yellow-500' : 
+                  passwordStrength === 2 ? 'bg-yellow-500' :
                   passwordStrength === 3 ? 'bg-blue-500' : 'bg-green-500'
-                }`} 
+                }`}
                 style={{ width: `${passwordStrength * 25}%` }}
               ></div>
             </div>
@@ -280,9 +277,7 @@ export default function Login() {
               onClick={handlePasswordUpdate}
               disabled={loading}
               className={`w-full text-white py-3 rounded-lg font-semibold ${
-                loading
-                  ? 'bg-blue-400 cursor-not-allowed'
-                  : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
+                loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
               }`}
             >
               {loading ? 'Updating...' : 'Update Password'}
