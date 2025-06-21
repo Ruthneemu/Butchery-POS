@@ -26,9 +26,20 @@ export default function Login() {
   }, []);
 
   useEffect(() => {
-    const { data: authListener } = supabase.auth.onAuthStateChange((event) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setMode('update');
+      }
+      if (event === 'USER_UPDATED') {
+        setMessage({
+          type: 'success',
+          text: 'Password updated successfully! Redirecting...'
+        });
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        setMode('login');
+        setNewPassword('');
+        setConfirmPassword('');
+        setMessage(null);
       }
     });
 
@@ -113,18 +124,10 @@ export default function Login() {
     try {
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
-      setMessage({
-        type: 'success',
-        text: 'Password updated successfully! Redirecting to login...'
-      });
-      setTimeout(() => {
-        setNewPassword('');
-        setConfirmPassword('');
-        setMode('login');
-      }, 3000);
+      
+      // The USER_UPDATED event in the auth listener will handle the success case
     } catch (error) {
       setMessage({ type: 'error', text: error.message });
-    } finally {
       setLoading(false);
     }
   };
