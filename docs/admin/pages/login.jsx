@@ -16,7 +16,7 @@ export default function Login() {
   // Check for password recovery token in URL
   useEffect(() => {
     const { hash } = window.location;
-    if (hash.includes('type=recovery')) {
+    if (hash.includes('#update-password') || hash.includes('type=recovery')) {
       setMode('update');
     }
   }, []);
@@ -46,14 +46,16 @@ export default function Login() {
     }
     setMessage(null);
     setLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/update-password`
-    });
-    setLoading(false);
-    if (error) setMessage({ type: 'error', text: error.message });
-    else {
-      setMessage({ type: 'success', text: 'Reset link sent to your email!' });
-      setMode('login');
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/login#update-password`
+      });
+      if (error) throw error;
+      setMessage({ type: 'success', text: 'Password reset link sent to your email!' });
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -62,14 +64,28 @@ export default function Login() {
       setMessage({ type: 'error', text: 'Passwords do not match' });
       return;
     }
+    if (newPassword.length < 6) {
+      setMessage({ type: 'error', text: 'Password should be at least 6 characters' });
+      return;
+    }
+    
     setMessage(null);
     setLoading(true);
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    setLoading(false);
-    if (error) setMessage({ type: 'error', text: error.message });
-    else {
-      setMessage({ type: 'success', text: 'Password updated!' });
-      navigate('/dashboard');
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setMessage({ 
+        type: 'success', 
+        text: 'Password updated successfully! You can now login with your new password.' 
+      });
+      // Clear form and redirect to login
+      setNewPassword('');
+      setConfirmPassword('');
+      setMode('login');
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -159,6 +175,9 @@ export default function Login() {
           </>
         ) : mode === 'reset' ? (
           <div className="space-y-4">
+            <p className="text-gray-600 text-sm mb-4">
+              Enter your email address and we'll send you a link to reset your password.
+            </p>
             <input
               type="email"
               placeholder="Your email"
@@ -187,6 +206,9 @@ export default function Login() {
           </div>
         ) : (
           <div className="space-y-4">
+            <p className="text-gray-600 text-sm mb-4">
+              Please enter your new password below.
+            </p>
             <input
               type="password"
               placeholder="New Password"
@@ -211,6 +233,12 @@ export default function Login() {
               }`}
             >
               {loading ? 'Updating...' : 'Update Password'}
+            </button>
+            <button
+              onClick={() => setMode('login')}
+              className="w-full py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-semibold"
+            >
+              Back to Login
             </button>
           </div>
         )}
