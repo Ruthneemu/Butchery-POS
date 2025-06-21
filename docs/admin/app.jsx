@@ -18,6 +18,7 @@ import Sales from './pages/sales';
 import Register from './pages/register';
 import Settings from './pages/settings';
 import Login from './pages/login';
+import Payment from '.pages/payment';
 import Layout from './components/layout';
 
 // ✅ ProtectedRoute updated to allow Supabase password recovery mode
@@ -72,6 +73,14 @@ const App = () => {
           element={
             <ProtectedRoute>
               <Sales />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/payment"
+          element={
+            <ProtectedRoute>
+              <Payment />
             </ProtectedRoute>
           }
         />

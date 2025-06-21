@@ -1,7 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import supabase from '../supabaseClient';
 import Layout from "../components/layout";
 import { CSVLink } from 'react-csv';
+import { Chart } from 'chart.js/auto';
+import html2canvas from 'html2canvas';
 
 const Inventory = () => {
   const [products, setProducts] = useState([]);
@@ -18,6 +20,7 @@ const Inventory = () => {
   const [newVariant, setNewVariant] = useState('');
   const [variants, setVariants] = useState([]);
   const [barcode, setBarcode] = useState('');
+  const [category, setCategory] = useState('meat');
 
   // Bulk import states
   const [bulkData, setBulkData] = useState('');
@@ -35,10 +38,32 @@ const Inventory = () => {
   const [editVariant, setEditVariant] = useState('');
   const [editVariants, setEditVariants] = useState([]);
   const [editBarcode, setEditBarcode] = useState('');
+  const [editCategory, setEditCategory] = useState('meat');
 
   const [error, setError] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [lowStockFilter, setLowStockFilter] = useState(false);
+  const [nearExpiryFilter, setNearExpiryFilter] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [showScanner, setShowScanner] = useState(false);
+  const [scannedBarcode, setScannedBarcode] = useState('');
+  const [stockTakeMode, setStockTakeMode] = useState(false);
+  const [stockTakeCounts, setStockTakeCounts] = useState({});
+  const [showInventoryChart, setShowInventoryChart] = useState(false);
+  
+  const videoRef = useRef();
+  const canvasRef = useRef();
+  const chartRef = useRef();
+  const chartInstance = useRef(null);
+
+  // Categories for butchery products
+  const categories = [
+    { value: 'meat', label: 'Meat' },
+    { value: 'poultry', label: 'Poultry' },
+    { value: 'seafood', label: 'Seafood' },
+    { value: 'processed', label: 'Processed' },
+    { value: 'other', label: 'Other' }
+  ];
 
   // Fetch products from Supabase
   const fetchProducts = async () => {
@@ -52,8 +77,20 @@ const Inventory = () => {
       query = query.lt('quantity', 5);
     }
 
+    if (nearExpiryFilter) {
+      const today = new Date();
+      const nextWeek = new Date(today);
+      nextWeek.setDate(today.getDate() + 7);
+      query = query.lte('expiry_date', nextWeek.toISOString())
+                  .gte('expiry_date', today.toISOString());
+    }
+
     if (searchTerm) {
       query = query.ilike('name', `%${searchTerm}%`);
+    }
+
+    if (categoryFilter !== 'all') {
+      query = query.eq('category', categoryFilter);
     }
 
     const { data, error } = await query;
@@ -62,13 +99,51 @@ const Inventory = () => {
       console.error('Error fetching products:', error.message);
     } else {
       setProducts(data);
+      // Initialize stock take counts
+      if (stockTakeMode) {
+        const counts = {};
+        data.forEach(product => {
+          counts[product.id] = product.quantity;
+        });
+        setStockTakeCounts(counts);
+      }
     }
     setLoading(false);
   };
 
   useEffect(() => {
     fetchProducts();
-  }, [searchTerm, lowStockFilter]);
+    
+    // Clean up chart on unmount
+    return () => {
+      if (chartInstance.current) {
+        chartInstance.current.destroy();
+      }
+    };
+  }, [searchTerm, lowStockFilter, nearExpiryFilter, categoryFilter]);
+
+  // Initialize barcode scanner
+  useEffect(() => {
+    if (showScanner) {
+      startBarcodeScanner();
+    } else {
+      stopBarcodeScanner();
+    }
+
+    return () => {
+      stopBarcodeScanner();
+    };
+  }, [showScanner]);
+
+  // Initialize chart when showInventoryChart changes
+  useEffect(() => {
+    if (showInventoryChart && products.length > 0) {
+      renderInventoryChart();
+    } else if (chartInstance.current) {
+      chartInstance.current.destroy();
+      chartInstance.current = null;
+    }
+  }, [showInventoryChart, products]);
 
   // Upload image to Supabase storage
   const uploadImage = async (file, productId) => {
@@ -117,9 +192,10 @@ const Inventory = () => {
             expiry_date: newExpiry || null,
             price: Number(newPrice),
             unit: newUnit,
-            selling_price: Number(sellingPrice) || Number(newPrice) * 1.2, // Default to 20% markup
+            selling_price: Number(sellingPrice) || Number(newPrice) * 1.2,
             variants: variants.length > 0 ? variants : null,
-            barcode: barcode || null
+            barcode: barcode || null,
+            category: category
           },
         ])
         .select()
@@ -151,6 +227,7 @@ const Inventory = () => {
       setVariants([]);
       setNewVariant('');
       setBarcode('');
+      setCategory('meat');
 
       fetchProducts();
     } catch (error) {
@@ -207,6 +284,7 @@ const Inventory = () => {
     setEditSellingPrice(product.selling_price ?? '');
     setEditVariants(product.variants || []);
     setEditBarcode(product.barcode || '');
+    setEditCategory(product.category || 'meat');
   };
 
   // Cancel editing
@@ -221,6 +299,7 @@ const Inventory = () => {
     setEditVariant('');
     setEditBarcode('');
     setEditImage(null);
+    setEditCategory('meat');
   };
 
   // Save edited product
@@ -239,7 +318,8 @@ const Inventory = () => {
         unit: editUnit,
         selling_price: Number(editSellingPrice) || Number(editPrice) * 1.2,
         variants: editVariants.length > 0 ? editVariants : null,
-        barcode: editBarcode || null
+        barcode: editBarcode || null,
+        category: editCategory
       };
 
       // Upload new image if provided
@@ -273,7 +353,7 @@ const Inventory = () => {
       for (const line of lines) {
         if (!line.trim()) continue;
         
-        const [name, quantity, price, unit = 'kg', expiry = null, sellingPrice = null, barcode = null] = line.split(',');
+        const [name, quantity, price, unit = 'kg', expiry = null, sellingPrice = null, barcode = null, category = 'meat'] = line.split(',');
         
         productsToImport.push({
           name: name.trim(),
@@ -282,7 +362,8 @@ const Inventory = () => {
           unit: unit.trim(),
           expiry_date: expiry?.trim() || null,
           selling_price: sellingPrice ? Number(sellingPrice.trim()) : null,
-          barcode: barcode?.trim() || null
+          barcode: barcode?.trim() || null,
+          category: category.trim() || 'meat'
         });
       }
       
@@ -301,6 +382,169 @@ const Inventory = () => {
     }
   };
 
+  // Start barcode scanner
+  const startBarcodeScanner = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        video: { facingMode: 'environment' } 
+      });
+      videoRef.current.srcObject = stream;
+      
+      // Simple barcode detection (in a real app, you'd use a library like QuaggaJS)
+      const detectBarcode = () => {
+        if (!videoRef.current || !canvasRef.current) return;
+        
+        const canvas = canvasRef.current;
+        const context = canvas.getContext('2d');
+        canvas.width = videoRef.current.videoWidth;
+        canvas.height = videoRef.current.videoHeight;
+        context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+        
+        // In a real implementation, you would process the image here
+        // For demo purposes, we'll just simulate detection
+        setTimeout(() => {
+          setScannedBarcode('123456789'); // Simulated barcode
+          setShowScanner(false);
+        }, 2000);
+      };
+      
+      const interval = setInterval(detectBarcode, 3000);
+      return () => clearInterval(interval);
+    } catch (err) {
+      console.error('Error accessing camera:', err);
+      setError('Could not access camera. Please ensure you have granted permission.');
+    }
+  };
+
+  // Stop barcode scanner
+  const stopBarcodeScanner = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
+    }
+  };
+
+  // Handle scanned barcode
+  useEffect(() => {
+    if (scannedBarcode) {
+      const product = products.find(p => p.barcode === scannedBarcode);
+      if (product) {
+        startEditing(product);
+      } else {
+        setBarcode(scannedBarcode);
+      }
+      setScannedBarcode('');
+    }
+  }, [scannedBarcode, products]);
+
+  // Stock take functions
+  const startStockTake = () => {
+    const counts = {};
+    products.forEach(product => {
+      counts[product.id] = product.quantity;
+    });
+    setStockTakeCounts(counts);
+    setStockTakeMode(true);
+  };
+
+  const updateStockTakeCount = (id, value) => {
+    setStockTakeCounts(prev => ({
+      ...prev,
+      [id]: Number(value)
+    }));
+  };
+
+  const saveStockTake = async () => {
+    try {
+      // Prepare updates
+      const updates = Object.keys(stockTakeCounts).map(id => ({
+        id,
+        quantity: stockTakeCounts[id]
+      }));
+
+      // Batch update
+      const { error } = await supabase
+        .from('inventory')
+        .upsert(updates);
+
+      if (error) throw error;
+
+      setStockTakeMode(false);
+      fetchProducts();
+      alert('Stock count updated successfully!');
+    } catch (error) {
+      alert('Failed to update stock: ' + error.message);
+    }
+  };
+
+  // Generate inventory report
+  const generateReport = async () => {
+    try {
+      const canvas = await html2canvas(document.querySelector('#inventory-dashboard'));
+      const link = document.createElement('a');
+      link.download = 'inventory-report.png';
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch (error) {
+      console.error('Error generating report:', error);
+    }
+  };
+
+  // Render inventory chart
+  const renderInventoryChart = () => {
+    if (chartInstance.current) {
+      chartInstance.current.destroy();
+    }
+    
+    const ctx = chartRef.current.getContext('2d');
+    
+    // Categorize products
+    const categoriesData = {};
+    categories.forEach(cat => {
+      categoriesData[cat.label] = products.filter(p => p.category === cat.value).length;
+    });
+    
+    // Low stock products
+    const lowStockCount = products.filter(p => isLowStock(p.quantity)).length;
+    
+    chartInstance.current = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: [...categories.map(c => c.label), 'Low Stock'],
+        datasets: [{
+          label: 'Inventory Overview',
+          data: [...categories.map(c => categoriesData[c.label]), lowStockCount],
+          backgroundColor: [
+            ...categories.map((_, i) => `hsl(${i * 70}, 70%, 50%)`),
+            'rgba(255, 99, 132, 0.7)'
+          ],
+          borderColor: [
+            ...categories.map((_, i) => `hsl(${i * 70}, 70%, 30%)`),
+            'rgba(255, 99, 132, 1)'
+          ],
+          borderWidth: 1
+        }]
+      },
+      options: {
+        responsive: true,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Inventory Overview'
+          },
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: 'Number of Products'
+            }
+          }
+        }
+      }
+    });
+  };
+
   // Helper: check if product is low stock (<5 units)
   const isLowStock = (qty) => qty < 5;
 
@@ -315,7 +559,7 @@ const Inventory = () => {
 
   // Prepare CSV data for export
   const csvData = [
-    ['Name', 'Quantity', 'Price', 'Unit', 'Expiry Date', 'Selling Price', 'Barcode', 'Variants'],
+    ['Name', 'Quantity', 'Price', 'Unit', 'Expiry Date', 'Selling Price', 'Barcode', 'Variants', 'Category'],
     ...products.map(product => [
       product.name,
       product.quantity,
@@ -324,44 +568,71 @@ const Inventory = () => {
       product.expiry_date || '',
       product.selling_price || '',
       product.barcode || '',
-      product.variants ? product.variants.join(';') : ''
+      product.variants ? product.variants.join(';') : '',
+      product.category || 'meat'
     ])
   ];
 
   return (
     <Layout>
       <div className="p-4 sm:p-6 bg-gray-50 min-h-screen w-full">
-        <h1 className="text-2xl sm:text-3xl font-bold text-red-700 mb-6">Butchery Inventory</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-red-700 mb-6">Butchery Inventory Management</h1>
 
         {/* Inventory Dashboard Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white p-4 rounded shadow">
-            <h3 className="font-semibold text-gray-600">Total Products</h3>
-            <p className="text-2xl font-bold">{products.length}</p>
+        <div id="inventory-dashboard" className="bg-white p-4 rounded shadow mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Inventory Dashboard</h2>
+            <div className="flex space-x-2">
+              <button 
+                onClick={() => setShowInventoryChart(!showInventoryChart)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
+              >
+                {showInventoryChart ? 'Hide Chart' : 'Show Chart'}
+              </button>
+              <button 
+                onClick={generateReport}
+                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
+              >
+                Generate Report
+              </button>
+            </div>
           </div>
-          <div className="bg-white p-4 rounded shadow">
-            <h3 className="font-semibold text-gray-600">Low Stock</h3>
-            <p className="text-2xl font-bold text-red-600">
-              {products.filter(p => isLowStock(p.quantity)).length}
-            </p>
-          </div>
-          <div className="bg-white p-4 rounded shadow">
-            <h3 className="font-semibold text-gray-600">Near Expiry</h3>
-            <p className="text-2xl font-bold text-yellow-600">
-              {products.filter(p => isNearExpiry(p.expiry_date)).length}
-            </p>
-          </div>
-          <div className="bg-white p-4 rounded shadow">
-            <h3 className="font-semibold text-gray-600">Total Value</h3>
-            <p className="text-2xl font-bold">
-              KSh {products.reduce((sum, p) => sum + (p.price * p.quantity), 0).toLocaleString()}
-            </p>
+
+          {showInventoryChart && (
+            <div className="mb-6">
+              <canvas ref={chartRef} height="300"></canvas>
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="bg-gray-100 p-4 rounded">
+              <h3 className="font-semibold text-gray-600">Total Products</h3>
+              <p className="text-2xl font-bold">{products.length}</p>
+            </div>
+            <div className="bg-gray-100 p-4 rounded">
+              <h3 className="font-semibold text-gray-600">Low Stock</h3>
+              <p className="text-2xl font-bold text-red-600">
+                {products.filter(p => isLowStock(p.quantity)).length}
+              </p>
+            </div>
+            <div className="bg-gray-100 p-4 rounded">
+              <h3 className="font-semibold text-gray-600">Near Expiry</h3>
+              <p className="text-2xl font-bold text-yellow-600">
+                {products.filter(p => isNearExpiry(p.expiry_date)).length}
+              </p>
+            </div>
+            <div className="bg-gray-100 p-4 rounded">
+              <h3 className="font-semibold text-gray-600">Total Value</h3>
+              <p className="text-2xl font-bold">
+                KSh {products.reduce((sum, p) => sum + (p.price * p.quantity), 0).toLocaleString()}
+              </p>
+            </div>
           </div>
         </div>
 
         {/* Search and Filter Controls */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-          <div className="flex items-center space-x-4 w-full sm:w-auto">
+          <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
             <input
               type="text"
               placeholder="Search products..."
@@ -369,42 +640,116 @@ const Inventory = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
+            <select
+              className="border border-gray-300 rounded px-3 py-2"
+              value={categoryFilter}
+              onChange={(e) => setCategoryFilter(e.target.value)}
+            >
+              <option value="all">All Categories</option>
+              {categories.map(cat => (
+                <option key={cat.value} value={cat.value}>{cat.label}</option>
+              ))}
+            </select>
             <button
               onClick={() => setLowStockFilter(!lowStockFilter)}
               className={`px-4 py-2 rounded ${lowStockFilter ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
             >
               Low Stock
             </button>
-          </div>
-          <div className="flex space-x-2 w-full sm:w-auto">
             <button
-              onClick={() => setShowBulkImport(!showBulkImport)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+              onClick={() => setNearExpiryFilter(!nearExpiryFilter)}
+              className={`px-4 py-2 rounded ${nearExpiryFilter ? 'bg-yellow-600 text-white' : 'bg-gray-200'}`}
             >
-              {showBulkImport ? 'Cancel Bulk Import' : 'Bulk Import'}
+              Near Expiry
             </button>
-            <CSVLink 
-              data={csvData} 
-              filename="inventory_export.csv"
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-center"
-            >
-              Export to CSV
-            </CSVLink>
+          </div>
+          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+            {!stockTakeMode ? (
+              <>
+                <button
+                  onClick={() => setShowBulkImport(!showBulkImport)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+                >
+                  {showBulkImport ? 'Cancel Bulk Import' : 'Bulk Import'}
+                </button>
+                <CSVLink 
+                  data={csvData} 
+                  filename="inventory_export.csv"
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-center"
+                >
+                  Export to CSV
+                </CSVLink>
+                <button
+                  onClick={startStockTake}
+                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded"
+                >
+                  Stock Count
+                </button>
+                <button
+                  onClick={() => setShowScanner(!showScanner)}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded"
+                >
+                  {showScanner ? 'Stop Scanner' : 'Scan Barcode'}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={saveStockTake}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
+                >
+                  Save Stock Count
+                </button>
+                <button
+                  onClick={() => setStockTakeMode(false)}
+                  className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
+                >
+                  Cancel
+                </button>
+              </>
+            )}
           </div>
         </div>
+
+        {/* Barcode Scanner */}
+        {showScanner && (
+          <div className="mb-6 bg-white p-4 rounded shadow-md">
+            <h2 className="text-xl font-semibold mb-2">Barcode Scanner</h2>
+            <div className="relative">
+              <video 
+                ref={videoRef} 
+                autoPlay 
+                playsInline 
+                className="w-full h-64 bg-black rounded"
+              />
+              <canvas ref={canvasRef} className="hidden" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="border-4 border-red-500 w-64 h-32 rounded-lg"></div>
+              </div>
+            </div>
+            <div className="mt-4">
+              <button
+                onClick={() => setShowScanner(false)}
+                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+              >
+                Close Scanner
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Bulk Import Form */}
         {showBulkImport && (
           <div className="mb-8 bg-white p-4 sm:p-6 rounded shadow-md">
             <h2 className="text-xl font-semibold mb-4">Bulk Import Products</h2>
             <p className="text-sm text-gray-600 mb-4">
-              Enter product data in CSV format (Name, Quantity, Price, Unit, Expiry Date, Selling Price, Barcode). One product per line.
+              Enter product data in CSV format (Name, Quantity, Price, Unit, Expiry Date, Selling Price, Barcode, Category). One product per line.
             </p>
             <textarea
               className="w-full border border-gray-300 rounded px-3 py-2 h-40 mb-4 font-mono text-sm"
               value={bulkData}
               onChange={(e) => setBulkData(e.target.value)}
-              placeholder="Example:&#10;Beef Ribeye,10,500,kg,2023-12-31,600,123456789&#10;Chicken Breast,20,300,kg,,350,987654321"
+              placeholder="Example:&#10;Beef Ribeye,10,500,kg,2023-12-31,600,123456789,meat&#10;Chicken Breast,20,300,kg,,350,987654321,poultry"
             />
             <div className="flex justify-end space-x-2">
               <button
@@ -500,14 +845,37 @@ const Inventory = () => {
             </div>
 
             <div>
-              <label className="block mb-1 font-medium">Barcode</label>
-              <input
-                type="text"
+              <label className="block mb-1 font-medium">Category*</label>
+              <select
                 className="w-full border border-gray-300 rounded px-3 py-2"
-                value={barcode}
-                onChange={(e) => setBarcode(e.target.value)}
-                placeholder="e.g., 123456789"
-              />
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+                required
+              >
+                {categories.map(cat => (
+                  <option key={cat.value} value={cat.value}>{cat.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block mb-1 font-medium">Barcode</label>
+              <div className="flex">
+                <input
+                  type="text"
+                  className="flex-1 border border-gray-300 rounded-l px-3 py-2"
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  placeholder="e.g., 123456789"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowScanner(true)}
+                  className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-r"
+                >
+                  Scan
+                </button>
+              </div>
             </div>
 
             <div>
@@ -588,6 +956,7 @@ const Inventory = () => {
                   <th className="px-4 py-2 text-left text-sm">#</th>
                   <th className="px-4 py-2 text-left text-sm">Image</th>
                   <th className="px-4 py-2 text-left text-sm">Name</th>
+                  <th className="px-4 py-2 text-left text-sm">Category</th>
                   <th className="px-4 py-2 text-left text-sm">Quantity</th>
                   <th className="px-4 py-2 text-left text-sm">Expiry Date</th>
                   <th className="px-4 py-2 text-left text-sm">Price</th>
@@ -633,6 +1002,18 @@ const Inventory = () => {
                             className="border border-gray-300 rounded px-2 py-1 w-full"
                             required
                           />
+                        </td>
+                        <td className="px-4 py-2">
+                          <select
+                            value={editCategory}
+                            onChange={(e) => setEditCategory(e.target.value)}
+                            className="border border-gray-300 rounded px-2 py-1 w-full"
+                            required
+                          >
+                            {categories.map(cat => (
+                              <option key={cat.value} value={cat.value}>{cat.label}</option>
+                            ))}
+                          </select>
                         </td>
                         <td className="px-4 py-2">
                           <input
@@ -722,13 +1103,22 @@ const Inventory = () => {
                           </div>
                         </td>
                         <td className="px-4 py-2">
-                          <input
-                            type="text"
-                            value={editBarcode}
-                            onChange={(e) => setEditBarcode(e.target.value)}
-                            className="border border-gray-300 rounded px-2 py-1 w-full text-sm"
-                            placeholder="Barcode"
-                          />
+                          <div className="flex">
+                            <input
+                              type="text"
+                              value={editBarcode}
+                              onChange={(e) => setEditBarcode(e.target.value)}
+                              className="flex-1 border border-gray-300 rounded-l px-2 py-1 text-sm"
+                              placeholder="Barcode"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => setShowScanner(true)}
+                              className="bg-orange-600 hover:bg-orange-700 text-white px-2 py-1 rounded-r text-sm"
+                            >
+                              Scan
+                            </button>
+                          </div>
                         </td>
                         <td className="px-4 py-2 space-x-2">
                           <button
@@ -748,7 +1138,7 @@ const Inventory = () => {
                     );
                   }
 
-                  // Normal row
+                  // Normal row or stock take row
                   return (
                     <tr
                       key={product.id}
@@ -783,9 +1173,25 @@ const Inventory = () => {
                           </span>
                         )}
                       </td>
-                      <td className={`px-4 py-2 ${lowStock ? 'text-red-600 font-bold' : ''}`}>
-                        {product.quantity} {product.unit}
+                      <td className="px-4 py-2">
+                        {categories.find(c => c.value === product.category)?.label || product.category}
                       </td>
+                      {stockTakeMode ? (
+                        <td className="px-4 py-2">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={stockTakeCounts[product.id] || ''}
+                            onChange={(e) => updateStockTakeCount(product.id, e.target.value)}
+                            className={`border rounded px-2 py-1 w-24 ${lowStock ? 'border-red-500' : ''}`}
+                          />
+                        </td>
+                      ) : (
+                        <td className={`px-4 py-2 ${lowStock ? 'text-red-600 font-bold' : ''}`}>
+                          {product.quantity} {product.unit}
+                        </td>
+                      )}
                       <td className={`px-4 py-2 ${nearExpiry ? 'text-yellow-600 font-bold' : ''}`}>
                         {product.expiry_date
                           ? new Date(product.expiry_date).toLocaleDateString()
@@ -807,18 +1213,22 @@ const Inventory = () => {
                       </td>
                       <td className="px-4 py-2 text-sm">{product.barcode || 'N/A'}</td>
                       <td className="px-4 py-2 space-x-2">
-                        <button
-                          onClick={() => startEditing(product)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => deleteProduct(product.id)}
-                          className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
-                        >
-                          Delete
-                        </button>
+                        {!stockTakeMode && (
+                          <>
+                            <button
+                              onClick={() => startEditing(product)}
+                              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => deleteProduct(product.id)}
+                              className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
+                            >
+                              Delete
+                            </button>
+                          </>
+                        )}
                       </td>
                     </tr>
                   );
@@ -837,13 +1247,57 @@ const Inventory = () => {
                 .filter(p => isLowStock(p.quantity))
                 .map(product => (
                   <div key={product.id} className="bg-white p-3 rounded shadow-sm border-l-4 border-red-500">
-                    <h3 className="font-semibold">{product.name}</h3>
-                    <p className="text-red-600">
-                      Only {product.quantity} {product.unit} remaining
-                    </p>
-                    <p className="text-sm text-gray-600">
-                      Last updated: {new Date(product.updated_at).toLocaleString()}
-                    </p>
+                    <div className="flex items-start">
+                      {product.image_url && (
+                        <img 
+                          src={product.image_url} 
+                          alt={product.name} 
+                          className="w-12 h-12 object-cover rounded mr-3"
+                        />
+                      )}
+                      <div>
+                        <h3 className="font-semibold">{product.name}</h3>
+                        <p className="text-red-600">
+                          Only {product.quantity} {product.unit} remaining
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Last updated: {new Date(product.updated_at).toLocaleString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
+
+        {/* Near Expiry Alert Section */}
+        {products.some(p => isNearExpiry(p.expiry_date)) && (
+          <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded p-4">
+            <h2 className="text-xl font-semibold text-yellow-700 mb-4">Near Expiry Alert</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {products
+                .filter(p => isNearExpiry(p.expiry_date))
+                .map(product => (
+                  <div key={product.id} className="bg-white p-3 rounded shadow-sm border-l-4 border-yellow-500">
+                    <div className="flex items-start">
+                      {product.image_url && (
+                        <img 
+                          src={product.image_url} 
+                          alt={product.name} 
+                          className="w-12 h-12 object-cover rounded mr-3"
+                        />
+                      )}
+                      <div>
+                        <h3 className="font-semibold">{product.name}</h3>
+                        <p className="text-yellow-600">
+                          Expires on: {new Date(product.expiry_date).toLocaleDateString()}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Quantity: {product.quantity} {product.unit}
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 ))}
             </div>
