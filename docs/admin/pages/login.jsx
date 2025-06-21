@@ -10,16 +10,47 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [mode, setMode] = useState('login'); // 'login' | 'reset' | 'update'
+  const [passwordStrength, setPasswordStrength] = useState(0);
 
   const navigate = useNavigate();
 
-  // Check for password recovery token in URL
+  // Check for password recovery
   useEffect(() => {
+    // Check URL hash for password reset
     const { hash } = window.location;
     if (hash.includes('#update-password') || hash.includes('type=recovery')) {
       setMode('update');
+      // Clean up the URL
+      window.history.replaceState({}, document.title, window.location.pathname);
     }
+
+    // Listen for auth state changes
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setMode('update');
+      }
+    });
+
+    return () => {
+      authListener?.subscription.unsubscribe();
+    };
   }, []);
+
+  // Password strength indicator
+  useEffect(() => {
+    if (newPassword.length === 0) {
+      setPasswordStrength(0);
+    } else if (newPassword.length < 6) {
+      setPasswordStrength(1);
+    } else if (newPassword.length < 10) {
+      setPasswordStrength(2);
+    } else {
+      // Check for special characters and numbers
+      const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(newPassword);
+      const hasNumber = /[0-9]/.test(newPassword);
+      setPasswordStrength(hasSpecialChar && hasNumber ? 4 : 3);
+    }
+  }, [newPassword]);
 
   const handleLogin = async () => {
     setMessage(null);
@@ -40,18 +71,24 @@ export default function Login() {
   };
 
   const handlePasswordReset = async () => {
-    if (!email) {
-      setMessage({ type: 'error', text: 'Please enter your email' });
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!email || !emailRegex.test(email)) {
+      setMessage({ type: 'error', text: 'Please enter a valid email address' });
       return;
     }
+    
     setMessage(null);
     setLoading(true);
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/login#update-password`
       });
+      
       if (error) throw error;
-      setMessage({ type: 'success', text: 'Password reset link sent to your email!' });
+      setMessage({ 
+        type: 'success', 
+        text: 'Password reset link sent to your email! Please check your inbox.' 
+      });
     } catch (error) {
       setMessage({ type: 'error', text: error.message });
     } finally {
@@ -76,12 +113,14 @@ export default function Login() {
       if (error) throw error;
       setMessage({ 
         type: 'success', 
-        text: 'Password updated successfully! You can now login with your new password.' 
+        text: 'Password updated successfully! Redirecting to login...' 
       });
-      // Clear form and redirect to login
-      setNewPassword('');
-      setConfirmPassword('');
-      setMode('login');
+      
+      setTimeout(() => {
+        setNewPassword('');
+        setConfirmPassword('');
+        setMode('login');
+      }, 3000);
     } catch (error) {
       setMessage({ type: 'error', text: error.message });
     } finally {
@@ -112,6 +151,7 @@ export default function Login() {
                 onChange={(e) => setEmail(e.target.value)}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-400 focus:border-blue-400"
                 autoComplete="email"
+                autoFocus
               />
               <input
                 type="password"
@@ -185,6 +225,7 @@ export default function Login() {
               onChange={(e) => setEmail(e.target.value)}
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-400 focus:border-blue-400"
               autoComplete="email"
+              autoFocus
             />
             <button
               onClick={handlePasswordReset}
@@ -215,7 +256,19 @@ export default function Login() {
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-400 focus:border-blue-400"
+              autoFocus
             />
+            <div className="w-full bg-gray-200 rounded-full h-2.5 mb-4">
+              <div 
+                className={`h-2.5 rounded-full ${
+                  passwordStrength === 0 ? 'bg-gray-200' :
+                  passwordStrength === 1 ? 'bg-red-500' :
+                  passwordStrength === 2 ? 'bg-yellow-500' : 
+                  passwordStrength === 3 ? 'bg-blue-500' : 'bg-green-500'
+                }`} 
+                style={{ width: `${passwordStrength * 25}%` }}
+              ></div>
+            </div>
             <input
               type="password"
               placeholder="Confirm Password"
