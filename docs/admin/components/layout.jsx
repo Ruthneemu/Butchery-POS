@@ -8,7 +8,7 @@ const navItems = [
   { name: "Sales", path: "/sales" },
   { name: "Reports", path: "/reports" },
   { name: "Employee", path: "/employee" },
-  { name: "Payment", path: "/payment" }
+  { name: "Payment", path: "/payment" },
   { name: "Settings", path: "/settings" },
 ];
 
