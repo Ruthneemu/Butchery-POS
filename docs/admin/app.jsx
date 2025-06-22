@@ -18,7 +18,7 @@ import Sales from './pages/sales';
 import Register from './pages/register';
 import Settings from './pages/settings';
 import Login from './pages/login';
-import Payment from './pages/payment';
+import Payment from './pages/payment';  
 import Employee from './pages/employee';
 import Layout from './components/layout';
 
