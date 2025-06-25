@@ -1,3 +1,4 @@
+// vite.config.js
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
@@ -9,7 +10,7 @@ export default defineConfig({
       external: ['prop-types'],
       output: {
         globals: {
-          'prop-types': 'PropTypes' // This matches the global variable name
+          'prop-types': 'PropTypes' // Must match CDN global
         }
       }
     }
