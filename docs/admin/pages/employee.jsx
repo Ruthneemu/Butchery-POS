@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import supabase  from '../supabaseClient';
 import { FiDollarSign, FiDownload, FiPrinter, FiCalendar, FiUser } from 'react-icons/fi';
 import Layout from "../components/layout";
 import DatePicker from 'react-datepicker';
