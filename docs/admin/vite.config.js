@@ -6,8 +6,13 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     rollupOptions: {
-      external: ['prop-types'], // Explicitly mark prop-types as external
-    },
+      external: ['prop-types'],
+      output: {
+        globals: {
+          'prop-types': 'PropTypes' // This matches the global variable name
+        }
+      }
+    }
   },
-  plugins: [react()],
+  plugins: [react()]
 });
