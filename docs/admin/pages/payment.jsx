@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import supabase from '../supabaseClient';
 import Layout from "../components/layout";
-import { CSVLink } from 'react-csv';
+import Papa from 'papaparse';
 import { Chart } from 'chart.js/auto';
+import html2canvas from 'html2canvas';
 import { loadStripe } from '@stripe/stripe-js';
 
 // Initialize Stripe
