@@ -8,5 +8,5 @@ export default defineConfig({
    
   },
   plugins: [react()],
-  // No optimizeDeps related to prop-types
+  
 });
