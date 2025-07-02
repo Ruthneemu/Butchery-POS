@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import supabase  from '../supabaseClient';
-import { FiDollarSign, FiDownload, FiPrinter, FiCalendar, FiUser } from 'react-icons/fi';
-import Layout from "../components/layout";
+import supabase from '../supabaseClient';
+import { FiDownload } from 'react-icons/fi';
+import Layout from '../components/layout';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import jsPDF from 'jspdf';
@@ -11,22 +11,10 @@ const Payroll = () => {
   const [payrolls, setPayrolls] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [timeCards, setTimeCards] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [payPeriodStart, setPayPeriodStart] = useState(new Date(new Date().setDate(new Date().getDate() - 14)));
   const [payPeriodEnd, setPayPeriodEnd] = useState(new Date());
   const [selectedEmployee, setSelectedEmployee] = useState('all');
   const [showPayrollForm, setShowPayrollForm] = useState(false);
-  const [newPayroll, setNewPayroll] = useState({
-    employee_id: '',
-    pay_period_start: '',
-    pay_period_end: '',
-    hours_worked: 0,
-    gross_pay: 0,
-    taxes: 0,
-    deductions: 0,
-    net_pay: 0,
-    status: 'pending'
-  });
 
   useEffect(() => {
     fetchPayrolls();
@@ -39,10 +27,7 @@ const Payroll = () => {
       .from('payrolls')
       .select('*, employees(name)')
       .order('pay_period_end', { ascending: false });
-
-    if (!error) {
-      setPayrolls(data);
-    }
+    if (!error) setPayrolls(data);
   };
 
   const fetchEmployees = async () => {
@@ -50,10 +35,7 @@ const Payroll = () => {
       .from('employees')
       .select('*')
       .order('name', { ascending: true });
-
-    if (!error) {
-      setEmployees(data);
-    }
+    if (!error) setEmployees(data);
   };
 
   const fetchTimeCards = async () => {
@@ -61,28 +43,22 @@ const Payroll = () => {
       .from('time_cards')
       .select('*')
       .order('clock_in', { ascending: false });
-
-    if (!error) {
-      setTimeCards(data);
-    }
+    if (!error) setTimeCards(data);
   };
 
   const calculatePayroll = () => {
-    const payrollData = [];
-    const filteredEmployees = selectedEmployee === 'all' 
-      ? employees 
+    const filteredEmployees = selectedEmployee === 'all'
+      ? employees
       : employees.filter(emp => emp.id === selectedEmployee);
 
-    filteredEmployees.forEach(employee => {
-      // Filter time cards for this employee in the selected pay period
-      const employeeTimeCards = timeCards.filter(card => 
+    return filteredEmployees.map(employee => {
+      const employeeTimeCards = timeCards.filter(card =>
         card.employee_id === employee.id &&
         new Date(card.clock_in) >= payPeriodStart &&
         new Date(card.clock_in) <= payPeriodEnd &&
         card.clock_out
       );
 
-      // Calculate total hours worked
       let totalHours = 0;
       employeeTimeCards.forEach(card => {
         const clockIn = new Date(card.clock_in);
@@ -90,13 +66,12 @@ const Payroll = () => {
         totalHours += (clockOut - clockIn) / (1000 * 60 * 60);
       });
 
-      // Calculate pay (simplified - in a real app you'd handle overtime, etc.)
       const grossPay = totalHours * employee.hourly_rate;
-      const taxes = grossPay * 0.15; // Simplified tax calculation
-      const deductions = 0; // Could include benefits, etc.
+      const taxes = grossPay * 0.15;
+      const deductions = 0;
       const netPay = grossPay - taxes - deductions;
 
-      payrollData.push({
+      return {
         employee_id: employee.id,
         employee_name: employee.name,
         hours_worked: totalHours.toFixed(2),
@@ -104,24 +79,41 @@ const Payroll = () => {
         gross_pay: grossPay.toFixed(2),
         taxes: taxes.toFixed(2),
         deductions: deductions.toFixed(2),
-        net_pay: netPay.toFixed(2)
-      });
+        net_pay: netPay.toFixed(2),
+        pay_period_start: payPeriodStart.toISOString(),
+        pay_period_end: payPeriodEnd.toISOString()
+      };
     });
-
-    return payrollData;
   };
 
-  const generatePayroll = async () => {
-    const payrollData = calculatePayroll();
-    
-    // In a real app, you would save this to your database
-    // For this demo, we'll just show it in the UI
+  const generatePayroll = () => {
     setShowPayrollForm(true);
-    setNewPayroll({
-      ...newPayroll,
-      pay_period_start: payPeriodStart.toISOString(),
-      pay_period_end: payPeriodEnd.toISOString()
-    });
+  };
+
+  const savePayrollsToDB = async () => {
+    const payrollData = calculatePayroll().map(p => ({
+      employee_id: p.employee_id,
+      hours_worked: p.hours_worked,
+      hourly_rate: p.hourly_rate,
+      gross_pay: p.gross_pay,
+      taxes: p.taxes,
+      deductions: p.deductions,
+      net_pay: p.net_pay,
+      pay_period_start: p.pay_period_start,
+      pay_period_end: p.pay_period_end,
+      status: 'paid'
+    }));
+
+    const { error } = await supabase.from('payrolls').insert(payrollData);
+
+    if (error) {
+      console.error('Error saving payroll:', error);
+      alert('Failed to save payroll');
+    } else {
+      alert('Payroll processed and saved successfully!');
+      setShowPayrollForm(false);
+      fetchPayrolls();
+    }
   };
 
   const exportToPDF = (payroll) => {
@@ -136,9 +128,8 @@ const Payroll = () => {
 
     doc.setFontSize(14);
     doc.setTextColor(0);
-    doc.text(`Employee: ${payroll.employees?.name || 'Unknown'}`, 14, 45);
+    doc.text(`Employee: ${payroll.employees?.name || payroll.employee_name || 'Unknown'}`, 14, 45);
 
-    // Payroll details
     autoTable(doc, {
       startY: 55,
       head: [['Description', 'Amount']],
@@ -151,7 +142,7 @@ const Payroll = () => {
         ['Net Pay', `$${payroll.net_pay}`]
       ],
       styles: { fontSize: 11 },
-      headStyles: { fillColor: [59, 130, 246] }, // blue-500
+      headStyles: { fillColor: [59, 130, 246] },
       columnStyles: {
         0: { fontStyle: 'bold' },
         1: { halign: 'right' }
@@ -165,7 +156,7 @@ const Payroll = () => {
     <Layout>
       <div className="p-6 bg-gray-50 min-h-screen">
         <h1 className="text-3xl font-bold text-gray-800 mb-6">Payroll Management</h1>
-        
+
         {/* Payroll Controls */}
         <div className="bg-white rounded-lg shadow-md p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">Generate Payroll</h2>
@@ -192,7 +183,7 @@ const Payroll = () => {
               <select
                 className="w-full border border-gray-300 rounded px-3 py-2"
                 value={selectedEmployee}
-                onChange={(e) => setSelectedEmployee(e.target.value)}
+                onChange={e => setSelectedEmployee(e.target.value)}
               >
                 <option value="all">All Employees</option>
                 {employees.map(emp => (
@@ -240,9 +231,7 @@ const Payroll = () => {
                         <button
                           onClick={() => exportToPDF({
                             ...payroll,
-                            employees: { name: payroll.employee_name },
-                            pay_period_start: payPeriodStart.toISOString(),
-                            pay_period_end: payPeriodEnd.toISOString()
+                            employees: { name: payroll.employee_name }
                           })}
                           className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
                         >
@@ -256,11 +245,7 @@ const Payroll = () => {
             </div>
             <div className="mt-4 flex justify-end gap-2">
               <button
-                onClick={() => {
-                  // In a real app, you would save all payroll records to the database
-                  alert('Payroll processed successfully!');
-                  setShowPayrollForm(false);
-                }}
+                onClick={savePayrollsToDB}
                 className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg"
               >
                 Process Payroll
