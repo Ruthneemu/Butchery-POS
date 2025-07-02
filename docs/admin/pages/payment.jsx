@@ -558,4 +558,4 @@ const Inventory = () => {
   );
 };
 
-export default Inventory;
+export default Payment;
