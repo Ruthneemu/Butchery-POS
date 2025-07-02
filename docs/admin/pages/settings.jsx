@@ -82,17 +82,18 @@ export default function Settings() {
 
   return (
     <Layout>
-      <div className="flex min-h-screen items-center justify-center p-4 bg-gray-50">
-        {/* Breadcrumb Navigation */}
-        <nav className="w-full bg-white p-4 mb-6 rounded-md shadow-md">
-          <ol className="list-reset flex text-sm text-gray-600">
-            <li className="mr-2">
-              <a href="/" className="text-blue-500 hover:text-blue-700">Home</a>
-            </li>
-            <li>/</li>
-            <li className="mx-2">Settings</li>
-          </ol>
-        </nav>
+      {/* Breadcrumb Navigation */}
+  <nav className="w-full bg-white p-4 mb-6 shadow-md">
+    <ol className="list-reset flex text-sm text-gray-600 max-w-5xl mx-auto">
+      <li className="mr-2">
+        <a href="/" className="text-blue-500 hover:text-blue-700">Home</a>
+      </li>
+      <li>/</li>
+      <li className="mx-2">Settings</li>
+    </ol>
+  </nav>
+  {/* Main Content Container - this was missing in your updated version */}
+  <div className="flex min-h-screen items-center justify-center p-4 bg-gray-50">
 
         {user ? (
           <div className="bg-white p-6 rounded shadow-md w-full max-w-md text-center">
