@@ -5,12 +5,8 @@ export default defineConfig({
   base: './',
   build: {
     outDir: 'dist',
-    commonjsOptions: {
-      include: [/prop-types/, /node_modules/]
-    }
+   
   },
   plugins: [react()],
-  optimizeDeps: {
-    include: ['prop-types']
-  }
+  // No optimizeDeps related to prop-types
 });
