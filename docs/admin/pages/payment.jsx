@@ -1,3 +1,4 @@
+// ...imports remain unchanged
 import React, { useState, useEffect, useRef } from 'react';
 import Layout from "../components/layout";
 import supabase from '../supabaseClient';
@@ -101,17 +102,9 @@ export default function Payment() {
     });
 
     return (
-      <section ref={refEl}>
-        <h2 className="text-2xl font-semibold mb-2">{title}</h2>
-
-        <div className="flex justify-between items-center mb-2">
-          <input
-            type="text"
-            placeholder={`Search ${searchKey.split('_')[0]}...`}
-            value={searchValue}
-            onChange={e => onSearchChange(e.target.value)}
-            className="border p-1 rounded"
-          />
+      <section ref={refEl} className="bg-white rounded shadow p-4 mb-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="text-xl font-semibold">{title}</h2>
           <div className="flex gap-2">
             <CSVLink
               data={sortedData}
@@ -129,18 +122,27 @@ export default function Payment() {
           </div>
         </div>
 
-        <div className="flex gap-4 mb-3">
-          <button onClick={() => handleSort('amount')} className="text-sm underline text-gray-700">
-            Sort by Amount {sortIcon('amount')}
-          </button>
-          <button onClick={() => handleSort('created_at')} className="text-sm underline text-gray-700">
-            Sort by Date {sortIcon('created_at')}
-          </button>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-3 gap-2">
+          <input
+            type="text"
+            placeholder={`Search ${searchKey.split('_')[0]}...`}
+            value={searchValue}
+            onChange={e => onSearchChange(e.target.value)}
+            className="border p-2 rounded w-full md:w-1/2"
+          />
+          <div className="flex gap-4 text-sm mt-2 md:mt-0">
+            <button onClick={() => handleSort('amount')} className="underline text-gray-700">
+              Sort by Amount {sortIcon('amount')}
+            </button>
+            <button onClick={() => handleSort('created_at')} className="underline text-gray-700">
+              Sort by Date {sortIcon('created_at')}
+            </button>
+          </div>
         </div>
 
-        <div className="bg-white shadow rounded p-4 space-y-2">
+        <div className="divide-y">
           {sortedData.map(p => (
-            <div key={p.id} className="border-b py-2">
+            <div key={p.id} className="py-2">
               <p>
                 <strong>{p[searchKey]}</strong>{' '}
                 {title.includes('Customer') ? 'paid' : 'was paid'}{' '}
@@ -156,20 +158,20 @@ export default function Payment() {
 
   return (
     <Layout>
-      <div className="p-4 space-y-10">
+      <div className="p-4 space-y-6 max-w-screen-lg mx-auto">
         {/* Date Filter */}
-        <div className="flex gap-4 mb-4 items-center">
+        <div className="flex flex-wrap gap-4 items-end bg-white shadow p-4 rounded">
           <div>
             <label className="block text-sm font-medium">Start Date</label>
-            <DatePicker selected={startDate} onChange={setStartDate} className="border p-1 rounded" />
+            <DatePicker selected={startDate} onChange={setStartDate} className="border p-2 rounded" />
           </div>
           <div>
             <label className="block text-sm font-medium">End Date</label>
-            <DatePicker selected={endDate} onChange={setEndDate} className="border p-1 rounded" />
+            <DatePicker selected={endDate} onChange={setEndDate} className="border p-2 rounded" />
           </div>
         </div>
 
-        {/* Payments */}
+        {/* Sections */}
         <PaymentSection
           title="Customer Payments"
           data={customerPayments}
@@ -191,11 +193,11 @@ export default function Payment() {
         />
 
         {/* Trial Balance */}
-        <section>
-          <h2 className="text-2xl font-semibold mb-2">Trial Balance</h2>
+        <section className="bg-white p-4 rounded shadow">
+          <h2 className="text-xl font-semibold mb-2">Trial Balance</h2>
           <table className="w-full text-left border">
             <thead>
-              <tr className="bg-gray-200">
+              <tr className="bg-gray-100">
                 <th className="p-2 border">Account</th>
                 <th className="p-2 border">Type</th>
                 <th className="p-2 border">Debit (KSh)</th>
@@ -215,25 +217,22 @@ export default function Payment() {
           </table>
         </section>
 
-        {/* Profit and Loss */}
-        <section>
-          <h2 className="text-2xl font-semibold mb-2">Profit and Loss</h2>
-          <div className="bg-white p-4 rounded shadow space-y-2">
-            <p>💰 <strong>Total Income:</strong> KSh {profitLoss.income.toLocaleString()}</p>
-            <p>💸 <strong>Total Expenses:</strong> KSh {profitLoss.expenses.toLocaleString()}</p>
-            <p className="mt-2 font-bold text-lg">
-              🧮 Net Profit:{' '}
-              <span className={profitLoss.net >= 0 ? 'text-green-600' : 'text-red-600'}>
-                KSh {profitLoss.net.toLocaleString()}
-              </span>
-            </p>
-          </div>
+        {/* Profit & Loss */}
+        <section className="bg-white p-4 rounded shadow">
+          <h2 className="text-xl font-semibold mb-2">Profit and Loss</h2>
+          <p>💰 <strong>Total Income:</strong> KSh {profitLoss.income.toLocaleString()}</p>
+          <p>💸 <strong>Total Expenses:</strong> KSh {profitLoss.expenses.toLocaleString()}</p>
+          <p className="mt-2 font-bold text-lg">
+            🧮 Net Profit: <span className={profitLoss.net >= 0 ? 'text-green-600' : 'text-red-600'}>
+              KSh {profitLoss.net.toLocaleString()}
+            </span>
+          </p>
         </section>
 
         {/* Balance Sheet */}
-        <section>
-          <h2 className="text-2xl font-semibold mb-2">Balance Sheet</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 rounded shadow text-center">
+        <section className="bg-white p-4 rounded shadow">
+          <h2 className="text-xl font-semibold mb-2">Balance Sheet</h2>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-center">
             <div>
               <h3 className="font-medium">Assets</h3>
               <p className="text-lg">KSh {balanceSheet.assets.toLocaleString()}</p>

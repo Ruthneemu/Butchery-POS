@@ -1,1311 +1,602 @@
-import React, { useState, useEffect, useRef } from 'react';
-import supabase from '../supabaseClient';
+import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 import Layout from "../components/layout";
-import { CSVLink } from 'react-csv';
-import { Chart } from 'chart.js/auto';
-import html2canvas from 'html2canvas';
 
-const Inventory = () => {
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
-
-  // Form states
-  const [newName, setNewName] = useState('');
-  const [newQuantity, setNewQuantity] = useState('');
-  const [newExpiry, setNewExpiry] = useState('');
-  const [newPrice, setNewPrice] = useState('');
-  const [newUnit, setNewUnit] = useState('kg');
-  const [sellingPrice, setSellingPrice] = useState('');
-  const [newImage, setNewImage] = useState(null);
-  const [newVariant, setNewVariant] = useState('');
-  const [variants, setVariants] = useState([]);
-  const [barcode, setBarcode] = useState('');
-  const [category, setCategory] = useState('meat');
-
-  // Bulk import states
-  const [bulkData, setBulkData] = useState('');
-  const [showBulkImport, setShowBulkImport] = useState(false);
+const InventoryManagement = () => {
+  // State for navigation between features
+  const [activeTab, setActiveTab] = useState('stockAdjustment');
   
-  // Editing states
-  const [editingProduct, setEditingProduct] = useState(null);
-  const [editName, setEditName] = useState('');
-  const [editQuantity, setEditQuantity] = useState('');
-  const [editExpiry, setEditExpiry] = useState('');
-  const [editPrice, setEditPrice] = useState('');
-  const [editUnit, setEditUnit] = useState('kg');
-  const [editSellingPrice, setEditSellingPrice] = useState('');
-  const [editImage, setEditImage] = useState(null);
-  const [editVariant, setEditVariant] = useState('');
-  const [editVariants, setEditVariants] = useState([]);
-  const [editBarcode, setEditBarcode] = useState('');
-  const [editCategory, setEditCategory] = useState('meat');
-
-  const [error, setError] = useState('');
-  const [searchTerm, setSearchTerm] = useState('');
-  const [lowStockFilter, setLowStockFilter] = useState(false);
-  const [nearExpiryFilter, setNearExpiryFilter] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState('all');
-  const [showScanner, setShowScanner] = useState(false);
-  const [scannedBarcode, setScannedBarcode] = useState('');
-  const [stockTakeMode, setStockTakeMode] = useState(false);
-  const [stockTakeCounts, setStockTakeCounts] = useState({});
-  const [showInventoryChart, setShowInventoryChart] = useState(false);
-  
-  const videoRef = useRef();
-  const canvasRef = useRef();
-  const chartRef = useRef();
-  const chartInstance = useRef(null);
-
-  // Categories for butchery products
-  const categories = [
-    { value: 'meat', label: 'Meat' },
-    { value: 'poultry', label: 'Poultry' },
-    { value: 'seafood', label: 'Seafood' },
-    { value: 'processed', label: 'Processed' },
-    { value: 'other', label: 'Other' }
-  ];
-
-  // Fetch products from Supabase
-  const fetchProducts = async () => {
-    setLoading(true);
-    let query = supabase
-      .from('inventory')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (lowStockFilter) {
-      query = query.lt('quantity', 5);
-    }
-
-    if (nearExpiryFilter) {
-      const today = new Date();
-      const nextWeek = new Date(today);
-      nextWeek.setDate(today.getDate() + 7);
-      query = query.lte('expiry_date', nextWeek.toISOString())
-                  .gte('expiry_date', today.toISOString());
-    }
-
-    if (searchTerm) {
-      query = query.ilike('name', `%${searchTerm}%`);
-    }
-
-    if (categoryFilter !== 'all') {
-      query = query.eq('category', categoryFilter);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Error fetching products:', error.message);
-    } else {
-      setProducts(data);
-      // Initialize stock take counts
-      if (stockTakeMode) {
-        const counts = {};
-        data.forEach(product => {
-          counts[product.id] = product.quantity;
-        });
-        setStockTakeCounts(counts);
-      }
-    }
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    fetchProducts();
-    
-    // Clean up chart on unmount
-    return () => {
-      if (chartInstance.current) {
-        chartInstance.current.destroy();
-      }
-    };
-  }, [searchTerm, lowStockFilter, nearExpiryFilter, categoryFilter]);
-
-  // Initialize barcode scanner
-  useEffect(() => {
-    if (showScanner) {
-      startBarcodeScanner();
-    } else {
-      stopBarcodeScanner();
-    }
-
-    return () => {
-      stopBarcodeScanner();
-    };
-  }, [showScanner]);
-
-  // Initialize chart when showInventoryChart changes
-  useEffect(() => {
-    if (showInventoryChart && products.length > 0) {
-      renderInventoryChart();
-    } else if (chartInstance.current) {
-      chartInstance.current.destroy();
-      chartInstance.current = null;
-    }
-  }, [showInventoryChart, products]);
-
-  // Upload image to Supabase storage
-  const uploadImage = async (file, productId) => {
-    if (!file) return null;
-    
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${productId || 'temp'}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
-    
-    const { data, error } = await supabase
-      .storage
-      .from('product-images')
-      .upload(fileName, file);
-    
-    if (error) {
-      console.error('Error uploading image:', error.message);
-      return null;
-    }
-    
-    // Get public URL
-    const { data: { publicUrl } } = supabase
-      .storage
-      .from('product-images')
-      .getPublicUrl(data.path);
-    
-    return publicUrl;
-  };
-
-  // Add new product
-  const addProduct = async (e) => {
-    e.preventDefault();
-    setError('');
-
-    if (!newName || !newQuantity || !newPrice) {
-      setError('Please fill in required fields (Name, Quantity, Price)');
-      return;
-    }
-
-    try {
-      // First create the product to get an ID
-      const { data: productData, error: productError } = await supabase
-        .from('inventory')
-        .insert([
-          {
-            name: newName,
-            quantity: Number(newQuantity),
-            expiry_date: newExpiry || null,
-            price: Number(newPrice),
-            unit: newUnit,
-            selling_price: Number(sellingPrice) || Number(newPrice) * 1.2,
-            variants: variants.length > 0 ? variants : null,
-            barcode: barcode || null,
-            category: category
-          },
-        ])
-        .select()
-        .single();
-
-      if (productError) throw productError;
-
-      // Upload image if provided
-      let imageUrl = null;
-      if (newImage) {
-        imageUrl = await uploadImage(newImage, productData.id);
-        if (imageUrl) {
-          // Update product with image URL
-          await supabase
-            .from('inventory')
-            .update({ image_url: imageUrl })
-            .eq('id', productData.id);
-        }
-      }
-
-      // Reset form
-      setNewName('');
-      setNewQuantity('');
-      setNewExpiry('');
-      setNewPrice('');
-      setNewUnit('kg');
-      setSellingPrice('');
-      setNewImage(null);
-      setVariants([]);
-      setNewVariant('');
-      setBarcode('');
-      setCategory('meat');
-
-      fetchProducts();
-    } catch (error) {
-      setError(error.message);
-    }
-  };
-
-  // Add variant to new product
-  const addVariant = () => {
-    if (newVariant && !variants.includes(newVariant)) {
-      setVariants([...variants, newVariant]);
-      setNewVariant('');
-    }
-  };
-
-  // Remove variant from new product
-  const removeVariant = (variantToRemove) => {
-    setVariants(variants.filter(v => v !== variantToRemove));
-  };
-
-  // Add variant to edited product
-  const addEditVariant = () => {
-    if (editVariant && !editVariants.includes(editVariant)) {
-      setEditVariants([...editVariants, editVariant]);
-      setEditVariant('');
-    }
-  };
-
-  // Remove variant from edited product
-  const removeEditVariant = (variantToRemove) => {
-    setEditVariants(editVariants.filter(v => v !== variantToRemove));
-  };
-
-  // Delete product
-  const deleteProduct = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this product?')) return;
-
-    const { error } = await supabase.from('inventory').delete().eq('id', id);
-    if (error) {
-      alert('Failed to delete: ' + error.message);
-    } else {
-      fetchProducts();
-    }
-  };
-
-  // Start editing product
-  const startEditing = (product) => {
-    setEditingProduct(product.id);
-    setEditName(product.name);
-    setEditQuantity(product.quantity);
-    setEditExpiry(product.expiry_date?.slice(0, 10) || '');
-    setEditPrice(product.price ?? '');
-    setEditUnit(product.unit ?? 'kg');
-    setEditSellingPrice(product.selling_price ?? '');
-    setEditVariants(product.variants || []);
-    setEditBarcode(product.barcode || '');
-    setEditCategory(product.category || 'meat');
-  };
-
-  // Cancel editing
-  const cancelEditing = () => {
-    setEditingProduct(null);
-    setEditName('');
-    setEditQuantity('');
-    setEditExpiry('');
-    setEditUnit('kg');
-    setEditSellingPrice('');
-    setEditVariants([]);
-    setEditVariant('');
-    setEditBarcode('');
-    setEditImage(null);
-    setEditCategory('meat');
-  };
-
-  // Save edited product
-  const saveEdit = async (id) => {
-    if (!editName || !editQuantity || !editPrice) {
-      alert('Please fill in required fields (Name, Quantity, Price)');
-      return;
-    }
-
-    try {
-      const updateData = {
-        name: editName,
-        quantity: Number(editQuantity),
-        expiry_date: editExpiry || null,
-        price: Number(editPrice),
-        unit: editUnit,
-        selling_price: Number(editSellingPrice) || Number(editPrice) * 1.2,
-        variants: editVariants.length > 0 ? editVariants : null,
-        barcode: editBarcode || null,
-        category: editCategory
-      };
-
-      // Upload new image if provided
-      if (editImage) {
-        const imageUrl = await uploadImage(editImage, id);
-        if (imageUrl) {
-          updateData.image_url = imageUrl;
-        }
-      }
-
-      const { error } = await supabase
-        .from('inventory')
-        .update(updateData)
-        .eq('id', id);
-
-      if (error) throw error;
-
-      cancelEditing();
-      fetchProducts();
-    } catch (error) {
-      alert('Update failed: ' + error.message);
-    }
-  };
-
-  // Handle bulk import
-  const handleBulkImport = async () => {
-    try {
-      const lines = bulkData.split('\n');
-      const productsToImport = [];
-      
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        
-        const [name, quantity, price, unit = 'kg', expiry = null, sellingPrice = null, barcode = null, category = 'meat'] = line.split(',');
-        
-        productsToImport.push({
-          name: name.trim(),
-          quantity: Number(quantity.trim()),
-          price: Number(price.trim()),
-          unit: unit.trim(),
-          expiry_date: expiry?.trim() || null,
-          selling_price: sellingPrice ? Number(sellingPrice.trim()) : null,
-          barcode: barcode?.trim() || null,
-          category: category.trim() || 'meat'
-        });
-      }
-      
-      const { error } = await supabase
-        .from('inventory')
-        .insert(productsToImport);
-        
-      if (error) throw error;
-      
-      setBulkData('');
-      setShowBulkImport(false);
-      fetchProducts();
-      alert('Products imported successfully!');
-    } catch (error) {
-      setError('Bulk import failed: ' + error.message);
-    }
-  };
-
-  // Start barcode scanner
-  const startBarcodeScanner = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      });
-      videoRef.current.srcObject = stream;
-      
-      // Simple barcode detection (in a real app, you'd use a library like QuaggaJS)
-      const detectBarcode = () => {
-        if (!videoRef.current || !canvasRef.current) return;
-        
-        const canvas = canvasRef.current;
-        const context = canvas.getContext('2d');
-        canvas.width = videoRef.current.videoWidth;
-        canvas.height = videoRef.current.videoHeight;
-        context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        
-        // In a real implementation, you would process the image here
-        // For demo purposes, we'll just simulate detection
-        setTimeout(() => {
-          setScannedBarcode('123456789'); // Simulated barcode
-          setShowScanner(false);
-        }, 2000);
-      };
-      
-      const interval = setInterval(detectBarcode, 3000);
-      return () => clearInterval(interval);
-    } catch (err) {
-      console.error('Error accessing camera:', err);
-      setError('Could not access camera. Please ensure you have granted permission.');
-    }
-  };
-
-  // Stop barcode scanner
-  const stopBarcodeScanner = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-    }
-  };
-
-  // Handle scanned barcode
-  useEffect(() => {
-    if (scannedBarcode) {
-      const product = products.find(p => p.barcode === scannedBarcode);
-      if (product) {
-        startEditing(product);
-      } else {
-        setBarcode(scannedBarcode);
-      }
-      setScannedBarcode('');
-    }
-  }, [scannedBarcode, products]);
-
-  // Stock take functions
-  const startStockTake = () => {
-    const counts = {};
-    products.forEach(product => {
-      counts[product.id] = product.quantity;
-    });
-    setStockTakeCounts(counts);
-    setStockTakeMode(true);
-  };
-
-  const updateStockTakeCount = (id, value) => {
-    setStockTakeCounts(prev => ({
-      ...prev,
-      [id]: Number(value)
-    }));
-  };
-
-  const saveStockTake = async () => {
-    try {
-      // Prepare updates
-      const updates = Object.keys(stockTakeCounts).map(id => ({
-        id,
-        quantity: stockTakeCounts[id]
-      }));
-
-      // Batch update
-      const { error } = await supabase
-        .from('inventory')
-        .upsert(updates);
-
-      if (error) throw error;
-
-      setStockTakeMode(false);
-      fetchProducts();
-      alert('Stock count updated successfully!');
-    } catch (error) {
-      alert('Failed to update stock: ' + error.message);
-    }
-  };
-
-  // Generate inventory report
-  const generateReport = async () => {
-    try {
-      const canvas = await html2canvas(document.querySelector('#inventory-dashboard'));
-      const link = document.createElement('a');
-      link.download = 'inventory-report.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } catch (error) {
-      console.error('Error generating report:', error);
-    }
-  };
-
-  // Render inventory chart
-  const renderInventoryChart = () => {
-    if (chartInstance.current) {
-      chartInstance.current.destroy();
-    }
-    
-    const ctx = chartRef.current.getContext('2d');
-    
-    // Categorize products
-    const categoriesData = {};
-    categories.forEach(cat => {
-      categoriesData[cat.label] = products.filter(p => p.category === cat.value).length;
-    });
-    
-    // Low stock products
-    const lowStockCount = products.filter(p => isLowStock(p.quantity)).length;
-    
-    chartInstance.current = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: [...categories.map(c => c.label), 'Low Stock'],
-        datasets: [{
-          label: 'Inventory Overview',
-          data: [...categories.map(c => categoriesData[c.label]), lowStockCount],
-          backgroundColor: [
-            ...categories.map((_, i) => `hsl(${i * 70}, 70%, 50%)`),
-            'rgba(255, 99, 132, 0.7)'
-          ],
-          borderColor: [
-            ...categories.map((_, i) => `hsl(${i * 70}, 70%, 30%)`),
-            'rgba(255, 99, 132, 1)'
-          ],
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          title: {
-            display: true,
-            text: 'Inventory Overview'
-          },
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            title: {
-              display: true,
-              text: 'Number of Products'
-            }
-          }
-        }
-      }
-    });
-  };
-
-  // Helper: check if product is low stock (<5 units)
-  const isLowStock = (qty) => qty < 5;
-
-  // Helper: check if product expiry is within 7 days
-  const isNearExpiry = (expiry) => {
-    if (!expiry) return false;
-    const expiryDate = new Date(expiry);
-    const today = new Date();
-    const diffDays = (expiryDate - today) / (1000 * 3600 * 24);
-    return diffDays >= 0 && diffDays <= 7;
-  };
-
-  // Prepare CSV data for export
-  const csvData = [
-    ['Name', 'Quantity', 'Price', 'Unit', 'Expiry Date', 'Selling Price', 'Barcode', 'Variants', 'Category'],
-    ...products.map(product => [
-      product.name,
-      product.quantity,
-      product.price,
-      product.unit,
-      product.expiry_date || '',
-      product.selling_price || '',
-      product.barcode || '',
-      product.variants ? product.variants.join(';') : '',
-      product.category || 'meat'
-    ])
-  ];
-
   return (
     <Layout>
-      <div className="p-4 sm:p-6 bg-gray-50 min-h-screen w-full">
+      <div className="p-4 sm:p-6 bg-gray-50 min-h-screen">
         <h1 className="text-2xl sm:text-3xl font-bold text-red-700 mb-6">Butchery Inventory Management</h1>
-
-        {/* Inventory Dashboard Summary */}
-        <div id="inventory-dashboard" className="bg-white p-4 rounded shadow mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Inventory Dashboard</h2>
-            <div className="flex space-x-2">
-              <button 
-                onClick={() => setShowInventoryChart(!showInventoryChart)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
-              >
-                {showInventoryChart ? 'Hide Chart' : 'Show Chart'}
-              </button>
-              <button 
-                onClick={generateReport}
-                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
-              >
-                Generate Report
-              </button>
-            </div>
-          </div>
-
-          {showInventoryChart && (
-            <div className="mb-6">
-              <canvas ref={chartRef} height="300"></canvas>
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-gray-100 p-4 rounded">
-              <h3 className="font-semibold text-gray-600">Total Products</h3>
-              <p className="text-2xl font-bold">{products.length}</p>
-            </div>
-            <div className="bg-gray-100 p-4 rounded">
-              <h3 className="font-semibold text-gray-600">Low Stock</h3>
-              <p className="text-2xl font-bold text-red-600">
-                {products.filter(p => isLowStock(p.quantity)).length}
-              </p>
-            </div>
-            <div className="bg-gray-100 p-4 rounded">
-              <h3 className="font-semibold text-gray-600">Near Expiry</h3>
-              <p className="text-2xl font-bold text-yellow-600">
-                {products.filter(p => isNearExpiry(p.expiry_date)).length}
-              </p>
-            </div>
-            <div className="bg-gray-100 p-4 rounded">
-              <h3 className="font-semibold text-gray-600">Total Value</h3>
-              <p className="text-2xl font-bold">
-                KSh {products.reduce((sum, p) => sum + (p.price * p.quantity), 0).toLocaleString()}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        {/* Search and Filter Controls */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
-          <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
-            <input
-              type="text"
-              placeholder="Search products..."
-              className="border border-gray-300 rounded px-3 py-2 w-full sm:w-64"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-            <select
-              className="border border-gray-300 rounded px-3 py-2"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-            >
-              <option value="all">All Categories</option>
-              {categories.map(cat => (
-                <option key={cat.value} value={cat.value}>{cat.label}</option>
-              ))}
-            </select>
-            <button
-              onClick={() => setLowStockFilter(!lowStockFilter)}
-              className={`px-4 py-2 rounded ${lowStockFilter ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
-            >
-              Low Stock
-            </button>
-            <button
-              onClick={() => setNearExpiryFilter(!nearExpiryFilter)}
-              className={`px-4 py-2 rounded ${nearExpiryFilter ? 'bg-yellow-600 text-white' : 'bg-gray-200'}`}
-            >
-              Near Expiry
-            </button>
-          </div>
-          <div className="flex flex-wrap gap-2 w-full sm:w-auto">
-            {!stockTakeMode ? (
-              <>
-                <button
-                  onClick={() => setShowBulkImport(!showBulkImport)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-                >
-                  {showBulkImport ? 'Cancel Bulk Import' : 'Bulk Import'}
-                </button>
-                <CSVLink 
-                  data={csvData} 
-                  filename="inventory_export.csv"
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-center"
-                >
-                  Export to CSV
-                </CSVLink>
-                <button
-                  onClick={startStockTake}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded"
-                >
-                  Stock Count
-                </button>
-                <button
-                  onClick={() => setShowScanner(!showScanner)}
-                  className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded"
-                >
-                  {showScanner ? 'Stop Scanner' : 'Scan Barcode'}
-                </button>
-              </>
-            ) : (
-              <>
-                <button
-                  onClick={saveStockTake}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
-                >
-                  Save Stock Count
-                </button>
-                <button
-                  onClick={() => setStockTakeMode(false)}
-                  className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
-                >
-                  Cancel
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Barcode Scanner */}
-        {showScanner && (
-          <div className="mb-6 bg-white p-4 rounded shadow-md">
-            <h2 className="text-xl font-semibold mb-2">Barcode Scanner</h2>
-            <div className="relative">
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline 
-                className="w-full h-64 bg-black rounded"
-              />
-              <canvas ref={canvasRef} className="hidden" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="border-4 border-red-500 w-64 h-32 rounded-lg"></div>
-              </div>
-            </div>
-            <div className="mt-4">
-              <button
-                onClick={() => setShowScanner(false)}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
-              >
-                Close Scanner
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Bulk Import Form */}
-        {showBulkImport && (
-          <div className="mb-8 bg-white p-4 sm:p-6 rounded shadow-md">
-            <h2 className="text-xl font-semibold mb-4">Bulk Import Products</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Enter product data in CSV format (Name, Quantity, Price, Unit, Expiry Date, Selling Price, Barcode, Category). One product per line.
-            </p>
-            <textarea
-              className="w-full border border-gray-300 rounded px-3 py-2 h-40 mb-4 font-mono text-sm"
-              value={bulkData}
-              onChange={(e) => setBulkData(e.target.value)}
-              placeholder="Example:&#10;Beef Ribeye,10,500,kg,2023-12-31,600,123456789,meat&#10;Chicken Breast,20,300,kg,,350,987654321,poultry"
-            />
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={handleBulkImport}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
-              >
-                Import Products
-              </button>
-              <button
-                onClick={() => setShowBulkImport(false)}
-                className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Add Product Form */}
-        <form onSubmit={addProduct} className="mb-8 bg-white p-4 sm:p-6 rounded shadow-md w-full max-w-4xl mx-auto space-y-4">
-          <h2 className="text-xl font-semibold">Add New Product</h2>
-          {error && <p className="text-red-500">{error}</p>}
-          
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block mb-1 font-medium">Product Name*</label>
-              <input
-                type="text"
-                className="w-full border border-gray-300 rounded px-3 py-2"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                placeholder="e.g., Beef Ribeye"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1 font-medium">Quantity*</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                className="w-full border border-gray-300 rounded px-3 py-2"
-                value={newQuantity}
-                onChange={(e) => setNewQuantity(e.target.value)}
-                placeholder="e.g., 10"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1 font-medium">Price (KSh)*</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                className="w-full border border-gray-300 rounded px-3 py-2"
-                value={newPrice}
-                onChange={(e) => setNewPrice(e.target.value)}
-                placeholder="e.g., 500"
-                required
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1 font-medium">Selling Price (KSh)</label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                className="w-full border border-gray-300 rounded px-3 py-2"
-                placeholder="e.g., 600"
-                value={sellingPrice}
-                onChange={(e) => setSellingPrice(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1 font-medium">Unit*</label>
-              <select
-                className="w-full border border-gray-300 rounded px-3 py-2"
-                value={newUnit}
-                onChange={(e) => setNewUnit(e.target.value)}
-                required
-              >
-                <option value="kg">kg</option>
-                <option value="piece">piece</option>
-                <option value="g">g</option>
-                <option value="pack">pack</option>
-                <option value="box">box</option>
-                <option value="liter">liter</option>
-              </select>
-            </div>
-
-            <div>
-              <label className="block mb-1 font-medium">Category*</label>
-              <select
-                className="w-full border border-gray-300 rounded px-3 py-2"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                required
-              >
-                {categories.map(cat => (
-                  <option key={cat.value} value={cat.value}>{cat.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block mb-1 font-medium">Barcode</label>
-              <div className="flex">
-                <input
-                  type="text"
-                  className="flex-1 border border-gray-300 rounded-l px-3 py-2"
-                  value={barcode}
-                  onChange={(e) => setBarcode(e.target.value)}
-                  placeholder="e.g., 123456789"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowScanner(true)}
-                  className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-r"
-                >
-                  Scan
-                </button>
-              </div>
-            </div>
-
-            <div>
-              <label className="block mb-1 font-medium">Expiry Date</label>
-              <input
-                type="date"
-                className="w-full border border-gray-300 rounded px-3 py-2"
-                value={newExpiry}
-                onChange={(e) => setNewExpiry(e.target.value)}
-              />
-            </div>
-
-            <div>
-              <label className="block mb-1 font-medium">Product Image</label>
-              <input
-                type="file"
-                accept="image/*"
-                className="w-full border border-gray-300 rounded px-3 py-2"
-                onChange={(e) => setNewImage(e.target.files[0])}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="block mb-1 font-medium">Variants</label>
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                className="flex-1 border border-gray-300 rounded px-3 py-2"
-                value={newVariant}
-                onChange={(e) => setNewVariant(e.target.value)}
-                placeholder="e.g., Large, Small, Frozen"
-              />
-              <button
-                type="button"
-                onClick={addVariant}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-              >
-                Add
-              </button>
-            </div>
-            {variants.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                {variants.map((variant) => (
-                  <span key={variant} className="bg-gray-200 px-3 py-1 rounded-full flex items-center">
-                    {variant}
-                    <button
-                      type="button"
-                      onClick={() => removeVariant(variant)}
-                      className="ml-2 text-red-600 hover:text-red-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
+        
+        {/* Navigation Tabs */}
+        <div className="flex flex-wrap gap-2 mb-6 border-b">
           <button
-            type="submit"
-            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-semibold"
+            onClick={() => setActiveTab('stockAdjustment')}
+            className={`px-4 py-2 rounded-t ${activeTab === 'stockAdjustment' ? 'bg-white border-t border-l border-r border-gray-300' : 'bg-gray-200'}`}
           >
-            Add Product
+            Stock Adjustment
           </button>
-        </form>
-
-        {/* Inventory Table */}
-        <div className="overflow-x-auto bg-white rounded shadow-md w-full">
-          {loading ? (
-            <p className="p-4 text-gray-600">Loading products...</p>
-          ) : products.length === 0 ? (
-            <p className="p-4 text-gray-600">No products found.</p>
-          ) : (
-            <table className="min-w-full table-auto">
-              <thead className="bg-red-700 text-white">
-                <tr>
-                  <th className="px-4 py-2 text-left text-sm">#</th>
-                  <th className="px-4 py-2 text-left text-sm">Image</th>
-                  <th className="px-4 py-2 text-left text-sm">Name</th>
-                  <th className="px-4 py-2 text-left text-sm">Category</th>
-                  <th className="px-4 py-2 text-left text-sm">Quantity</th>
-                  <th className="px-4 py-2 text-left text-sm">Expiry Date</th>
-                  <th className="px-4 py-2 text-left text-sm">Price</th>
-                  <th className="px-4 py-2 text-left text-sm">Selling Price</th>
-                  <th className="px-4 py-2 text-left text-sm">Unit</th>
-                  <th className="px-4 py-2 text-left text-sm">Variants</th>
-                  <th className="px-4 py-2 text-left text-sm">Barcode</th>
-                  <th className="px-4 py-2 text-left text-sm">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {products.map((product, idx) => {
-                  const lowStock = isLowStock(product.quantity);
-                  const nearExpiry = isNearExpiry(product.expiry_date);
-
-                  if (editingProduct === product.id) {
-                    // Editing row
-                    return (
-                      <tr key={product.id} className="border-b bg-yellow-50">
-                        <td className="px-4 py-2">{idx + 1}</td>
-                        <td className="px-4 py-2">
-                          <div className="flex items-center space-x-2">
-                            {product.image_url && (
-                              <img 
-                                src={product.image_url} 
-                                alt={product.name} 
-                                className="w-10 h-10 object-cover rounded"
-                              />
-                            )}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={(e) => setEditImage(e.target.files[0])}
-                              className="text-sm"
-                            />
-                          </div>
-                        </td>
-                        <td className="px-4 py-2">
-                          <input
-                            type="text"
-                            value={editName}
-                            onChange={(e) => setEditName(e.target.value)}
-                            className="border border-gray-300 rounded px-2 py-1 w-full"
-                            required
-                          />
-                        </td>
-                        <td className="px-4 py-2">
-                          <select
-                            value={editCategory}
-                            onChange={(e) => setEditCategory(e.target.value)}
-                            className="border border-gray-300 rounded px-2 py-1 w-full"
-                            required
-                          >
-                            {categories.map(cat => (
-                              <option key={cat.value} value={cat.value}>{cat.label}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-4 py-2">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={editQuantity}
-                            onChange={(e) => setEditQuantity(e.target.value)}
-                            className="border border-gray-300 rounded px-2 py-1 w-full"
-                            required
-                          />
-                        </td>
-                        <td className="px-4 py-2">
-                          <input
-                            type="date"
-                            value={editExpiry}
-                            onChange={(e) => setEditExpiry(e.target.value)}
-                            className="border border-gray-300 rounded px-2 py-1 w-full"
-                          />
-                        </td>
-                        <td className="px-4 py-2">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={editPrice}
-                            onChange={(e) => setEditPrice(e.target.value)}
-                            className="border border-gray-300 rounded px-2 py-1 w-full"
-                            required
-                          />
-                        </td>
-                        <td className="px-4 py-2">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={editSellingPrice}
-                            onChange={(e) => setEditSellingPrice(e.target.value)}
-                            className="border border-gray-300 rounded px-2 py-1 w-full"
-                          />
-                        </td>
-                        <td className="px-4 py-2">
-                          <select
-                            value={editUnit}
-                            onChange={(e) => setEditUnit(e.target.value)}
-                            className="border border-gray-300 rounded px-2 py-1 w-full"
-                            required
-                          >
-                            <option value="kg">kg</option>
-                            <option value="piece">piece</option>
-                            <option value="g">g</option>
-                            <option value="pack">pack</option>
-                            <option value="box">box</option>
-                            <option value="liter">liter</option>
-                          </select>
-                        </td>
-                        <td className="px-4 py-2">
-                          <div className="flex space-x-2 mb-2">
-                            <input
-                              type="text"
-                              value={editVariant}
-                              onChange={(e) => setEditVariant(e.target.value)}
-                              className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
-                              placeholder="Add variant"
-                            />
-                            <button
-                              type="button"
-                              onClick={addEditVariant}
-                              className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-sm"
-                            >
-                              Add
-                            </button>
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {editVariants.map((variant) => (
-                              <span key={variant} className="bg-gray-200 px-2 py-0.5 rounded-full text-xs flex items-center">
-                                {variant}
-                                <button
-                                  type="button"
-                                  onClick={() => removeEditVariant(variant)}
-                                  className="ml-1 text-red-600 hover:text-red-800"
-                                >
-                                  ×
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        </td>
-                        <td className="px-4 py-2">
-                          <div className="flex">
-                            <input
-                              type="text"
-                              value={editBarcode}
-                              onChange={(e) => setEditBarcode(e.target.value)}
-                              className="flex-1 border border-gray-300 rounded-l px-2 py-1 text-sm"
-                              placeholder="Barcode"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowScanner(true)}
-                              className="bg-orange-600 hover:bg-orange-700 text-white px-2 py-1 rounded-r text-sm"
-                            >
-                              Scan
-                            </button>
-                          </div>
-                        </td>
-                        <td className="px-4 py-2 space-x-2">
-                          <button
-                            onClick={() => saveEdit(product.id)}
-                            className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded"
-                          >
-                            Save
-                          </button>
-                          <button
-                            onClick={cancelEditing}
-                            className="bg-gray-400 hover:bg-gray-500 text-white px-3 py-1 rounded"
-                          >
-                            Cancel
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  }
-
-                  // Normal row or stock take row
-                  return (
-                    <tr
-                      key={product.id}
-                      className={`border-b hover:bg-gray-100 ${
-                        lowStock ? 'bg-red-50' : nearExpiry ? 'bg-yellow-50' : ''
-                      }`}
-                    >
-                      <td className="px-4 py-2">{idx + 1}</td>
-                      <td className="px-4 py-2">
-                        {product.image_url ? (
-                          <img 
-                            src={product.image_url} 
-                            alt={product.name} 
-                            className="w-10 h-10 object-cover rounded"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 bg-gray-200 rounded flex items-center justify-center text-gray-400">
-                            No Image
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-2 font-semibold">
-                        {product.name}
-                        {lowStock && (
-                          <span className="ml-2 text-xs bg-red-100 text-red-800 px-2 py-0.5 rounded-full">
-                            Low Stock
-                          </span>
-                        )}
-                        {nearExpiry && (
-                          <span className="ml-2 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full">
-                            Near Expiry
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-2">
-                        {categories.find(c => c.value === product.category)?.label || product.category}
-                      </td>
-                      {stockTakeMode ? (
-                        <td className="px-4 py-2">
-                          <input
-                            type="number"
-                            min="0"
-                            step="0.01"
-                            value={stockTakeCounts[product.id] || ''}
-                            onChange={(e) => updateStockTakeCount(product.id, e.target.value)}
-                            className={`border rounded px-2 py-1 w-24 ${lowStock ? 'border-red-500' : ''}`}
-                          />
-                        </td>
-                      ) : (
-                        <td className={`px-4 py-2 ${lowStock ? 'text-red-600 font-bold' : ''}`}>
-                          {product.quantity} {product.unit}
-                        </td>
-                      )}
-                      <td className={`px-4 py-2 ${nearExpiry ? 'text-yellow-600 font-bold' : ''}`}>
-                        {product.expiry_date
-                          ? new Date(product.expiry_date).toLocaleDateString()
-                          : 'N/A'}
-                      </td>
-                      <td className="px-4 py-2">KSh {product.price?.toLocaleString()}</td>
-                      <td className="px-4 py-2">KSh {product.selling_price?.toLocaleString()}</td>
-                      <td className="px-4 py-2">{product.unit}</td>
-                      <td className="px-4 py-2">
-                        {product.variants?.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {product.variants.map(variant => (
-                              <span key={variant} className="bg-gray-200 px-2 py-0.5 rounded-full text-xs">
-                                {variant}
-                              </span>
-                            ))}
-                          </div>
-                        ) : 'N/A'}
-                      </td>
-                      <td className="px-4 py-2 text-sm">{product.barcode || 'N/A'}</td>
-                      <td className="px-4 py-2 space-x-2">
-                        {!stockTakeMode && (
-                          <>
-                            <button
-                              onClick={() => startEditing(product)}
-                              className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => deleteProduct(product.id)}
-                              className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
-                            >
-                              Delete
-                            </button>
-                          </>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          )}
+          <button
+            onClick={() => setActiveTab('allAdjustments')}
+            className={`px-4 py-2 rounded-t ${activeTab === 'allAdjustments' ? 'bg-white border-t border-l border-r border-gray-300' : 'bg-gray-200'}`}
+          >
+            All Adjustments
+          </button>
+          <button
+            onClick={() => setActiveTab('purchaseOrder')}
+            className={`px-4 py-2 rounded-t ${activeTab === 'purchaseOrder' ? 'bg-white border-t border-l border-r border-gray-300' : 'bg-gray-200'}`}
+          >
+            Purchase Order
+          </button>
+          <button
+            onClick={() => setActiveTab('allOrders')}
+            className={`px-4 py-2 rounded-t ${activeTab === 'allOrders' ? 'bg-white border-t border-l border-r border-gray-300' : 'bg-gray-200'}`}
+          >
+            All Orders
+          </button>
         </div>
 
-        {/* Low Stock Alert Section */}
-        {products.some(p => isLowStock(p.quantity)) && (
-          <div className="mt-8 bg-red-50 border border-red-200 rounded p-4">
-            <h2 className="text-xl font-semibold text-red-700 mb-4">Low Stock Alert</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {products
-                .filter(p => isLowStock(p.quantity))
-                .map(product => (
-                  <div key={product.id} className="bg-white p-3 rounded shadow-sm border-l-4 border-red-500">
-                    <div className="flex items-start">
-                      {product.image_url && (
-                        <img 
-                          src={product.image_url} 
-                          alt={product.name} 
-                          className="w-12 h-12 object-cover rounded mr-3"
-                        />
-                      )}
-                      <div>
-                        <h3 className="font-semibold">{product.name}</h3>
-                        <p className="text-red-600">
-                          Only {product.quantity} {product.unit} remaining
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          Last updated: {new Date(product.updated_at).toLocaleString()}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        )}
-
-        {/* Near Expiry Alert Section */}
-        {products.some(p => isNearExpiry(p.expiry_date)) && (
-          <div className="mt-8 bg-yellow-50 border border-yellow-200 rounded p-4">
-            <h2 className="text-xl font-semibold text-yellow-700 mb-4">Near Expiry Alert</h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {products
-                .filter(p => isNearExpiry(p.expiry_date))
-                .map(product => (
-                  <div key={product.id} className="bg-white p-3 rounded shadow-sm border-l-4 border-yellow-500">
-                    <div className="flex items-start">
-                      {product.image_url && (
-                        <img 
-                          src={product.image_url} 
-                          alt={product.name} 
-                          className="w-12 h-12 object-cover rounded mr-3"
-                        />
-                      )}
-                      <div>
-                        <h3 className="font-semibold">{product.name}</h3>
-                        <p className="text-yellow-600">
-                          Expires on: {new Date(product.expiry_date).toLocaleDateString()}
-                        </p>
-                        <p className="text-sm text-gray-600">
-                          Quantity: {product.quantity} {product.unit}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        )}
+        {/* Render active component */}
+        <div className="bg-white p-4 sm:p-6 rounded shadow">
+          {activeTab === 'stockAdjustment' && <StockAdjustment />}
+          {activeTab === 'allAdjustments' && <AllStockAdjustments />}
+          {activeTab === 'purchaseOrder' && <PurchaseOrder />}
+          {activeTab === 'allOrders' && <AllPurchaseOrders />}
+        </div>
       </div>
     </Layout>
   );
 };
 
-export default Inventory;
+// 1. Stock Adjustment Component
+const StockAdjustment = () => {
+  const [products, setProducts] = useState([]);
+  const [productId, setProductId] = useState('');
+  const [adjustmentType, setAdjustmentType] = useState('decrease');
+  const [quantity, setQuantity] = useState('');
+  const [reason, setReason] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchProducts = async () => {
+      const { data, error } = await supabase.from('products').select('*');
+      if (error) console.error('Error fetching products:', error);
+      else setProducts(data || []);
+    };
+    fetchProducts();
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    if (!productId || !quantity || !reason) {
+      setError('Please fill all fields');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // 1. Record the adjustment
+      const { error: adjustmentError } = await supabase
+        .from('stock_adjustments')
+        .insert([{
+          product_id: productId,
+          adjustment_type: adjustmentType,
+          quantity: parseFloat(quantity),
+          reason,
+          adjusted_by: 'admin' // Replace with actual user from auth
+        }]);
+
+      if (adjustmentError) throw adjustmentError;
+
+      // 2. Update the product quantity
+      const { data: product } = await supabase
+        .from('products')
+        .select('quantity')
+        .eq('id', productId)
+        .single();
+
+      const newQuantity = adjustmentType === 'increase' 
+        ? product.quantity + parseFloat(quantity)
+        : product.quantity - parseFloat(quantity);
+
+      const { error: updateError } = await supabase
+        .from('products')
+        .update({ quantity: newQuantity })
+        .eq('id', productId);
+
+      if (updateError) throw updateError;
+
+      // Reset form
+      setProductId('');
+      setQuantity('');
+      setReason('');
+      alert('Stock adjusted successfully!');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold mb-4">Stock Adjustment</h2>
+      {error && <div className="bg-red-100 text-red-700 p-2 mb-4 rounded">{error}</div>}
+      
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block mb-1 font-medium">Product</label>
+          <select
+            value={productId}
+            onChange={(e) => setProductId(e.target.value)}
+            className="w-full p-2 border rounded"
+            required
+          >
+            <option value="">Select Product</option>
+            {products.map(product => (
+              <option key={product.id} value={product.id}>
+                {product.name} (Current: {product.quantity} {product.unit})
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block mb-1 font-medium">Adjustment Type</label>
+          <select
+            value={adjustmentType}
+            onChange={(e) => setAdjustmentType(e.target.value)}
+            className="w-full p-2 border rounded"
+          >
+            <option value="increase">Increase Stock</option>
+            <option value="decrease">Decrease Stock</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block mb-1 font-medium">Quantity</label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={quantity}
+            onChange={(e) => setQuantity(e.target.value)}
+            className="w-full p-2 border rounded"
+            required
+          />
+        </div>
+
+        <div>
+          <label className="block mb-1 font-medium">Reason</label>
+          <select
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            className="w-full p-2 border rounded"
+            required
+          >
+            <option value="">Select Reason</option>
+            <option value="spoilage">Spoilage</option>
+            <option value="theft">Theft</option>
+            <option value="counting_error">Counting Error</option>
+            <option value="other">Other</option>
+          </select>
+          {reason === 'other' && (
+            <input
+              type="text"
+              placeholder="Specify reason"
+              onChange={(e) => setReason(e.target.value)}
+              className="w-full p-2 border rounded mt-2"
+            />
+          )}
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+        >
+          {loading ? 'Processing...' : 'Submit Adjustment'}
+        </button>
+      </form>
+    </div>
+  );
+};
+
+// 2. All Stock Adjustments Component
+const AllStockAdjustments = () => {
+  const [adjustments, setAdjustments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchAdjustments = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('stock_adjustments')
+          .select(`
+            *,
+            products(name, unit)
+          `)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setAdjustments(data || []);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchAdjustments();
+  }, []);
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold mb-4">All Stock Adjustments</h2>
+      
+      {error && <div className="bg-red-100 text-red-700 p-2 mb-4 rounded">{error}</div>}
+      
+      {loading ? (
+        <p>Loading adjustments...</p>
+      ) : adjustments.length === 0 ? (
+        <p>No adjustments found.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full border">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="p-2 text-left border">Date</th>
+                <th className="p-2 text-left border">Product</th>
+                <th className="p-2 text-left border">Type</th>
+                <th className="p-2 text-left border">Quantity</th>
+                <th className="p-2 text-left border">Reason</th>
+                <th className="p-2 text-left border">Adjusted By</th>
+              </tr>
+            </thead>
+            <tbody>
+              {adjustments.map((adj) => (
+                <tr key={adj.id} className="hover:bg-gray-50">
+                  <td className="p-2 border">{new Date(adj.created_at).toLocaleString()}</td>
+                  <td className="p-2 border">{adj.products?.name}</td>
+                  <td className="p-2 border capitalize">
+                    <span className={`inline-block px-2 py-1 rounded text-xs ${
+                      adj.adjustment_type === 'increase' 
+                        ? 'bg-green-100 text-green-800' 
+                        : 'bg-red-100 text-red-800'
+                    }`}>
+                      {adj.adjustment_type}
+                    </span>
+                  </td>
+                  <td className="p-2 border">
+                    {adj.quantity} {adj.products?.unit}
+                  </td>
+                  <td className="p-2 border capitalize">{adj.reason}</td>
+                  <td className="p-2 border">{adj.adjusted_by}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// 3. Purchase Order Component
+const PurchaseOrder = () => {
+  const [products, setProducts] = useState([]);
+  const [suppliers, setSuppliers] = useState([]);
+  const [productId, setProductId] = useState('');
+  const [supplierId, setSupplierId] = useState('');
+  const [quantity, setQuantity] = useState('');
+  const [unitPrice, setUnitPrice] = useState('');
+  const [expectedDelivery, setExpectedDelivery] = useState('');
+  const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchData = async () => {
+      const [{ data: products }, { data: suppliers }] = await Promise.all([
+        supabase.from('products').select('*'),
+        supabase.from('suppliers').select('*')
+      ]);
+      setProducts(products || []);
+      setSuppliers(suppliers || []);
+    };
+    fetchData();
+  }, []);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+
+    if (!productId || !supplierId || !quantity || !unitPrice) {
+      setError('Please fill all required fields');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const totalCost = parseFloat(quantity) * parseFloat(unitPrice);
+      
+      const { error } = await supabase
+        .from('purchase_orders')
+        .insert([{
+          product_id: productId,
+          supplier_id: supplierId,
+          quantity: parseFloat(quantity),
+          unit_price: parseFloat(unitPrice),
+          total_cost: totalCost,
+          expected_delivery: expectedDelivery,
+          notes,
+          status: 'pending',
+          ordered_by: 'admin' // Replace with actual user from auth
+        }]);
+
+      if (error) throw error;
+
+      // Reset form
+      setProductId('');
+      setSupplierId('');
+      setQuantity('');
+      setUnitPrice('');
+      setExpectedDelivery('');
+      setNotes('');
+      alert('Purchase order created successfully!');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold mb-4">Create Purchase Order</h2>
+      {error && <div className="bg-red-100 text-red-700 p-2 mb-4 rounded">{error}</div>}
+      
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block mb-1 font-medium">Supplier*</label>
+            <select
+              value={supplierId}
+              onChange={(e) => setSupplierId(e.target.value)}
+              className="w-full p-2 border rounded"
+              required
+            >
+              <option value="">Select Supplier</option>
+              {suppliers.map(supplier => (
+                <option key={supplier.id} value={supplier.id}>
+                  {supplier.name} ({supplier.contact_number})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block mb-1 font-medium">Product*</label>
+            <select
+              value={productId}
+              onChange={(e) => setProductId(e.target.value)}
+              className="w-full p-2 border rounded"
+              required
+            >
+              <option value="">Select Product</option>
+              {products.map(product => (
+                <option key={product.id} value={product.id}>
+                  {product.name} ({product.unit})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className="block mb-1 font-medium">Quantity*</label>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={quantity}
+              onChange={(e) => setQuantity(e.target.value)}
+              className="w-full p-2 border rounded"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block mb-1 font-medium">Unit Price (KSh)*</label>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={unitPrice}
+              onChange={(e) => setUnitPrice(e.target.value)}
+              className="w-full p-2 border rounded"
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block mb-1 font-medium">Total Cost (KSh)</label>
+            <input
+              type="text"
+              value={quantity && unitPrice ? (parseFloat(quantity) * parseFloat(unitPrice)).toFixed(2) : '0.00'}
+              className="w-full p-2 border rounded bg-gray-100"
+              readOnly
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block mb-1 font-medium">Expected Delivery</label>
+            <input
+              type="date"
+              value={expectedDelivery}
+              onChange={(e) => setExpectedDelivery(e.target.value)}
+              className="w-full p-2 border rounded"
+            />
+          </div>
+
+          <div>
+            <label className="block mb-1 font-medium">Notes</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              className="w-full p-2 border rounded"
+              rows="1"
+            />
+          </div>
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
+        >
+          {loading ? 'Processing...' : 'Create Purchase Order'}
+        </button>
+      </form>
+    </div>
+  );
+};
+
+// 4. All Purchase Orders Component
+const AllPurchaseOrders = () => {
+  const [orders, setOrders] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    const fetchOrders = async () => {
+      setLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('purchase_orders')
+          .select(`
+            *,
+            products(name, unit),
+            suppliers(name)
+          `)
+          .order('created_at', { ascending: false });
+
+        if (error) throw error;
+        setOrders(data || []);
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOrders();
+  }, []);
+
+  const updateOrderStatus = async (orderId, newStatus) => {
+    try {
+      const { error } = await supabase
+        .from('purchase_orders')
+        .update({ status: newStatus })
+        .eq('id', orderId);
+
+      if (error) throw error;
+
+      // Refresh orders
+      setOrders(orders.map(order => 
+        order.id === orderId ? { ...order, status: newStatus } : order
+      ));
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  return (
+    <div>
+      <h2 className="text-xl font-bold mb-4">All Purchase Orders</h2>
+      
+      {error && <div className="bg-red-100 text-red-700 p-2 mb-4 rounded">{error}</div>}
+      
+      {loading ? (
+        <p>Loading orders...</p>
+      ) : orders.length === 0 ? (
+        <p>No purchase orders found.</p>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full border">
+            <thead className="bg-gray-100">
+              <tr>
+                <th className="p-2 text-left border">Date</th>
+                <th className="p-2 text-left border">Supplier</th>
+                <th className="p-2 text-left border">Product</th>
+                <th className="p-2 text-left border">Quantity</th>
+                <th className="p-2 text-left border">Unit Price</th>
+                <th className="p-2 text-left border">Total Cost</th>
+                <th className="p-2 text-left border">Status</th>
+                <th className="p-2 text-left border">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {orders.map((order) => (
+                <tr key={order.id} className="hover:bg-gray-50">
+                  <td className="p-2 border">{new Date(order.created_at).toLocaleDateString()}</td>
+                  <td className="p-2 border">{order.suppliers?.name}</td>
+                  <td className="p-2 border">{order.products?.name}</td>
+                  <td className="p-2 border">
+                    {order.quantity} {order.products?.unit}
+                  </td>
+                  <td className="p-2 border">KSh {order.unit_price?.toFixed(2)}</td>
+                  <td className="p-2 border">KSh {order.total_cost?.toFixed(2)}</td>
+                  <td className="p-2 border">
+                    <span className={`inline-block px-2 py-1 rounded text-xs ${
+                      order.status === 'received' 
+                        ? 'bg-green-100 text-green-800'
+                        : order.status === 'cancelled'
+                        ? 'bg-red-100 text-red-800'
+                        : 'bg-yellow-100 text-yellow-800'
+                    }`}>
+                      {order.status}
+                    </span>
+                  </td>
+                  <td className="p-2 border space-x-1">
+                    {order.status === 'pending' && (
+                      <>
+                        <button
+                          onClick={() => updateOrderStatus(order.id, 'received')}
+                          className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 rounded text-xs"
+                        >
+                          Received
+                        </button>
+                        <button
+                          onClick={() => updateOrderStatus(order.id, 'cancelled')}
+                          className="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-xs"
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default InventoryManagement;
