@@ -989,17 +989,17 @@ const Reports = () => {
                           {reportType === 'inventory' ? (
                             <>
                               <td className="px-4 py-2">{item.unit}</td>
-                              <td className="px-4 py-2">${item.price.toFixed(2)}</td>
-                              <td className="px-4 py-2">${item.cost ? item.cost.toFixed(2) : 'N/A'}</td>
+                              <td className="px-4 py-2">Ksh{item.price.toFixed(2)}</td>
+                              <td className="px-4 py-2">Ksh{item.cost ? item.cost.toFixed(2) : 'N/A'}</td>
                               <td className="px-4 py-2">
                                 {item.expiry_date ? new Date(item.expiry_date).toLocaleDateString() : 'N/A'}
                               </td>
                             </>
                           ) : (
                             <>
-                              <td className="px-4 py-2">${item.unit_price.toFixed(2)}</td>
-                              <td className="px-4 py-2">${item.total_price.toFixed(2)}</td>
-                              <td className="px-4 py-2">${item.profit ? item.profit.toFixed(2) : 'N/A'}</td>
+                              <td className="px-4 py-2">Ksh{item.unit_price.toFixed(2)}</td>
+                              <td className="px-4 py-2">Ksh{item.total_price.toFixed(2)}</td>
+                              <td className="px-4 py-2">Ksh{item.profit ? item.profit.toFixed(2) : 'N/A'}</td>
                               <td className="px-4 py-2">
                                 {new Date(item.created_at).toLocaleDateString()}
                               </td>

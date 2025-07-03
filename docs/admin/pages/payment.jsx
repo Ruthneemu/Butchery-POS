@@ -6,6 +6,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
+import { FiDownload, FiFileText } from 'react-icons/fi';
 
 export default function Payment() {
   const [customerPayments, setCustomerPayments] = useState([]);
@@ -23,29 +24,20 @@ export default function Payment() {
   const supplierRef = useRef();
 
   useEffect(() => {
-    fetchCustomerPayments();
-    fetchSupplierPayments();
+    fetchPayments('customer_payments', setCustomerPayments);
+    fetchPayments('supplier_payments', setSupplierPayments);
     fetchTrialBalance();
     fetchProfitAndLoss();
     fetchBalanceSheet();
   }, [startDate, endDate]);
 
-  const fetchCustomerPayments = async () => {
-    let query = supabase.from('customer_payments').select('*');
+  const fetchPayments = async (table, setter) => {
+    let query = supabase.from(table).select('*');
     if (startDate) query = query.gte('created_at', startDate.toISOString());
     if (endDate) query = query.lte('created_at', endDate.toISOString());
     query = query.order('created_at', { ascending: false });
     const { data } = await query;
-    if (data) setCustomerPayments(data);
-  };
-
-  const fetchSupplierPayments = async () => {
-    let query = supabase.from('supplier_payments').select('*');
-    if (startDate) query = query.gte('created_at', startDate.toISOString());
-    if (endDate) query = query.lte('created_at', endDate.toISOString());
-    query = query.order('created_at', { ascending: false });
-    const { data } = await query;
-    if (data) setSupplierPayments(data);
+    if (data) setter(data);
   };
 
   const fetchTrialBalance = async () => {
@@ -54,106 +46,151 @@ export default function Payment() {
   };
 
   const fetchProfitAndLoss = async () => {
-    const { data: transactions } = await supabase.from('transactions').select('*');
-    if (!transactions) return;
-    const income = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
-    const expenses = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+    const { data } = await supabase.from('transactions').select('*');
+    if (!data) return;
+    const income = data.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+    const expenses = data.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
     setProfitLoss({ income, expenses, net: income - expenses });
   };
 
   const fetchBalanceSheet = async () => {
-    const { data: accounts } = await supabase.from('accounts').select('*');
-    if (!accounts) return;
-    const assets = accounts.filter(a => a.type === 'asset').reduce((sum, a) => sum + (a.debit - a.credit), 0);
-    const liabilities = accounts.filter(a => a.type === 'liability').reduce((sum, a) => sum + (a.credit - a.debit), 0);
-    const equity = accounts.filter(a => a.type === 'equity').reduce((sum, a) => sum + (a.credit - a.debit), 0);
+    const { data } = await supabase.from('accounts').select('*');
+    if (!data) return;
+    const assets = data.filter(a => a.type === 'asset').reduce((sum, a) => sum + (a.debit - a.credit), 0);
+    const liabilities = data.filter(a => a.type === 'liability').reduce((sum, a) => sum + (a.credit - a.debit), 0);
+    const equity = data.filter(a => a.type === 'equity').reduce((sum, a) => sum + (a.credit - a.debit), 0);
     setBalanceSheet({ assets, liabilities, equity });
   };
 
-  const exportPDF = (ref, title = 'payments') => {
+  const exportPDF = (ref, title = 'report') => {
     html2canvas(ref.current).then(canvas => {
-      const img = canvas.toDataURL('image/png');
       const pdf = new jsPDF();
       pdf.text(title, 10, 10);
-      pdf.addImage(img, 'PNG', 10, 20, 190, 0);
+      const imgData = canvas.toDataURL('image/png');
+      pdf.addImage(imgData, 'PNG', 10, 20, 190, 0);
       pdf.save(`${title}.pdf`);
     });
   };
 
-  const filterCustomerPayments = customerPayments.filter(p =>
-    p.customer_name.toLowerCase().includes(customerSearch.toLowerCase())
-  );
+  const PaymentSection = ({ title, data, searchValue, onSearchChange, searchKey, refEl, csvFileName }) => {
+    const [sortKey, setSortKey] = useState('created_at');
+    const [sortDirection, setSortDirection] = useState('desc');
 
-  const filterSupplierPayments = supplierPayments.filter(p =>
-    p.supplier_name.toLowerCase().includes(supplierSearch.toLowerCase())
-  );
+    const handleSort = (key) => {
+      if (sortKey === key) {
+        setSortDirection(prev => (prev === 'asc' ? 'desc' : 'asc'));
+      } else {
+        setSortKey(key);
+        setSortDirection('asc');
+      }
+    };
 
-  return (
-    <Layout>
-      <div className="p-4 space-y-8">
-        {/* Date Filter */}
-        <div className="flex gap-4 mb-6 items-center">
-          <div>
-            <label className="block text-sm font-medium">Start Date</label>
-            <DatePicker selected={startDate} onChange={date => setStartDate(date)} className="border p-1 rounded" />
-          </div>
-          <div>
-            <label className="block text-sm font-medium">End Date</label>
-            <DatePicker selected={endDate} onChange={date => setEndDate(date)} className="border p-1 rounded" />
+    const sortIcon = (key) => {
+      if (sortKey !== key) return '⇅';
+      return sortDirection === 'asc' ? '↑' : '↓';
+    };
+
+    const filteredData = data.filter(p =>
+      p[searchKey]?.toLowerCase().includes(searchValue.toLowerCase())
+    );
+
+    const sortedData = [...filteredData].sort((a, b) => {
+      const aVal = sortKey === 'created_at' ? new Date(a[sortKey]) : a[sortKey];
+      const bVal = sortKey === 'created_at' ? new Date(b[sortKey]) : b[sortKey];
+      return sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+    });
+
+    return (
+      <section ref={refEl}>
+        <h2 className="text-2xl font-semibold mb-2">{title}</h2>
+
+        <div className="flex justify-between items-center mb-2">
+          <input
+            type="text"
+            placeholder={`Search ${searchKey.split('_')[0]}...`}
+            value={searchValue}
+            onChange={e => onSearchChange(e.target.value)}
+            className="border p-1 rounded"
+          />
+          <div className="flex gap-2">
+            <CSVLink
+              data={sortedData}
+              filename={csvFileName}
+              className="btn bg-green-100 px-3 py-1 flex items-center gap-1 rounded text-sm"
+            >
+              <FiFileText /> CSV
+            </CSVLink>
+            <button
+              onClick={() => exportPDF(refEl, title)}
+              className="btn bg-blue-100 px-3 py-1 flex items-center gap-1 rounded text-sm"
+            >
+              <FiDownload /> PDF
+            </button>
           </div>
         </div>
 
-        {/* 1. Customer Payments */}
-        <section ref={customerRef}>
-          <h2 className="text-2xl font-semibold mb-2">Customer Payments</h2>
-          <div className="flex justify-between items-center mb-2">
-            <input
-              type="text"
-              placeholder="Search Customer..."
-              value={customerSearch}
-              onChange={(e) => setCustomerSearch(e.target.value)}
-              className="border p-1 rounded"
-            />
-            <div className="flex gap-2">
-              <CSVLink data={filterCustomerPayments} filename="customer_payments.csv" className="btn bg-green-100 px-2">Export CSV</CSVLink>
-              <button onClick={() => exportPDF(customerRef, 'Customer Payments')} className="btn bg-blue-100 px-2">Export PDF</button>
-            </div>
-          </div>
-          <div className="bg-white shadow rounded p-4 space-y-2">
-            {filterCustomerPayments.map(payment => (
-              <div key={payment.id} className="border-b py-2">
-                <p><strong>{payment.customer_name}</strong> paid <strong>KSh {payment.amount}</strong> on {new Date(payment.created_at).toLocaleString()}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+        <div className="flex gap-4 mb-3">
+          <button onClick={() => handleSort('amount')} className="text-sm underline text-gray-700">
+            Sort by Amount {sortIcon('amount')}
+          </button>
+          <button onClick={() => handleSort('created_at')} className="text-sm underline text-gray-700">
+            Sort by Date {sortIcon('created_at')}
+          </button>
+        </div>
 
-        {/* 2. Supplier Payments */}
-        <section ref={supplierRef}>
-          <h2 className="text-2xl font-semibold mb-2">Supplier Payments</h2>
-          <div className="flex justify-between items-center mb-2">
-            <input
-              type="text"
-              placeholder="Search Supplier..."
-              value={supplierSearch}
-              onChange={(e) => setSupplierSearch(e.target.value)}
-              className="border p-1 rounded"
-            />
-            <div className="flex gap-2">
-              <CSVLink data={filterSupplierPayments} filename="supplier_payments.csv" className="btn bg-green-100 px-2">Export CSV</CSVLink>
-              <button onClick={() => exportPDF(supplierRef, 'Supplier Payments')} className="btn bg-blue-100 px-2">Export PDF</button>
+        <div className="bg-white shadow rounded p-4 space-y-2">
+          {sortedData.map(p => (
+            <div key={p.id} className="border-b py-2">
+              <p>
+                <strong>{p[searchKey]}</strong>{' '}
+                {title.includes('Customer') ? 'paid' : 'was paid'}{' '}
+                <strong>KSh {p.amount?.toLocaleString()}</strong>{' '}
+                on {new Date(p.created_at).toLocaleString()}
+              </p>
             </div>
-          </div>
-          <div className="bg-white shadow rounded p-4 space-y-2">
-            {filterSupplierPayments.map(payment => (
-              <div key={payment.id} className="border-b py-2">
-                <p><strong>{payment.supplier_name}</strong> was paid <strong>KSh {payment.amount}</strong> on {new Date(payment.created_at).toLocaleString()}</p>
-              </div>
-            ))}
-          </div>
-        </section>
+          ))}
+        </div>
+      </section>
+    );
+  };
 
-        {/* 6. Trial Balance */}
+  return (
+    <Layout>
+      <div className="p-4 space-y-10">
+        {/* Date Filter */}
+        <div className="flex gap-4 mb-4 items-center">
+          <div>
+            <label className="block text-sm font-medium">Start Date</label>
+            <DatePicker selected={startDate} onChange={setStartDate} className="border p-1 rounded" />
+          </div>
+          <div>
+            <label className="block text-sm font-medium">End Date</label>
+            <DatePicker selected={endDate} onChange={setEndDate} className="border p-1 rounded" />
+          </div>
+        </div>
+
+        {/* Payments */}
+        <PaymentSection
+          title="Customer Payments"
+          data={customerPayments}
+          searchValue={customerSearch}
+          onSearchChange={setCustomerSearch}
+          searchKey="customer_name"
+          refEl={customerRef}
+          csvFileName="customer_payments.csv"
+        />
+
+        <PaymentSection
+          title="Supplier Payments"
+          data={supplierPayments}
+          searchValue={supplierSearch}
+          onSearchChange={setSupplierSearch}
+          searchKey="supplier_name"
+          refEl={supplierRef}
+          csvFileName="supplier_payments.csv"
+        />
+
+        {/* Trial Balance */}
         <section>
           <h2 className="text-2xl font-semibold mb-2">Trial Balance</h2>
           <table className="w-full text-left border">
@@ -166,51 +203,51 @@ export default function Payment() {
               </tr>
             </thead>
             <tbody>
-              {trialBalance.map(account => (
-                <tr key={account.name}>
-                  <td className="p-2 border">{account.name}</td>
-                  <td className="p-2 border capitalize">{account.type}</td>
-                  <td className="p-2 border">{account.debit?.toLocaleString()}</td>
-                  <td className="p-2 border">{account.credit?.toLocaleString()}</td>
+              {trialBalance.map(a => (
+                <tr key={a.name}>
+                  <td className="p-2 border">{a.name}</td>
+                  <td className="p-2 border capitalize">{a.type}</td>
+                  <td className="p-2 border">{a.debit?.toLocaleString()}</td>
+                  <td className="p-2 border">{a.credit?.toLocaleString()}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </section>
 
-        {/* 7. Profit and Loss */}
+        {/* Profit and Loss */}
         <section>
           <h2 className="text-2xl font-semibold mb-2">Profit and Loss</h2>
           <div className="bg-white p-4 rounded shadow space-y-2">
             <p>💰 <strong>Total Income:</strong> KSh {profitLoss.income.toLocaleString()}</p>
             <p>💸 <strong>Total Expenses:</strong> KSh {profitLoss.expenses.toLocaleString()}</p>
             <p className="mt-2 font-bold text-lg">
-              🧮 Net Profit: <span className={profitLoss.net >= 0 ? 'text-green-600' : 'text-red-600'}>
+              🧮 Net Profit:{' '}
+              <span className={profitLoss.net >= 0 ? 'text-green-600' : 'text-red-600'}>
                 KSh {profitLoss.net.toLocaleString()}
               </span>
             </p>
           </div>
         </section>
 
-        {/* 8. Balance Sheet */}
+        {/* Balance Sheet */}
         <section>
           <h2 className="text-2xl font-semibold mb-2">Balance Sheet</h2>
-          <div className="grid grid-cols-3 gap-4 bg-white p-4 rounded shadow">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-white p-4 rounded shadow text-center">
             <div>
               <h3 className="font-medium">Assets</h3>
-              <p>KSh {balanceSheet.assets.toLocaleString()}</p>
+              <p className="text-lg">KSh {balanceSheet.assets.toLocaleString()}</p>
             </div>
             <div>
               <h3 className="font-medium">Liabilities</h3>
-              <p>KSh {balanceSheet.liabilities.toLocaleString()}</p>
+              <p className="text-lg">KSh {balanceSheet.liabilities.toLocaleString()}</p>
             </div>
             <div>
               <h3 className="font-medium">Equity</h3>
-              <p>KSh {balanceSheet.equity.toLocaleString()}</p>
+              <p className="text-lg">KSh {balanceSheet.equity.toLocaleString()}</p>
             </div>
           </div>
         </section>
-
       </div>
     </Layout>
   );
