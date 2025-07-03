@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import supabase from '../supabaseClient';
 import { FiDownload } from 'react-icons/fi';
 import Layout from '../components/layout';
@@ -7,7 +7,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 
-const Payroll = () => {
+export default function Payroll() {
   const [payrolls, setPayrolls] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [timeCards, setTimeCards] = useState([]);
@@ -15,6 +15,16 @@ const Payroll = () => {
   const [payPeriodEnd, setPayPeriodEnd] = useState(new Date());
   const [selectedEmployee, setSelectedEmployee] = useState('all');
   const [showPayrollForm, setShowPayrollForm] = useState(false);
+  const [filterStart, setFilterStart] = useState(null);
+  const [filterEnd, setFilterEnd] = useState(null);
+
+  // Registration & enhanced fields
+  const [newEmployeeName, setNewEmployeeName] = useState('');
+  const [newEmployeeRate, setNewEmployeeRate] = useState('');
+  const [newEmployeeRole, setNewEmployeeRole] = useState('');
+  const [newEmployeePhoto, setNewEmployeePhoto] = useState(null);
+
+  const fileInputRef = useRef();
 
   useEffect(() => {
     fetchPayrolls();
@@ -23,291 +33,196 @@ const Payroll = () => {
   }, []);
 
   const fetchPayrolls = async () => {
-    const { data, error } = await supabase
-      .from('payrolls')
-      .select('*, employees(name)')
-      .order('pay_period_end', { ascending: false });
+    let q = supabase.from('payrolls').select('*, employee:employees(name, role)');
+    if (filterStart) q = q.gte('pay_period_start', filterStart.toISOString());
+    if (filterEnd) q = q.lte('pay_period_end', filterEnd.toISOString());
+    const { data, error } = await q.order('pay_period_end', { ascending: false });
     if (!error) setPayrolls(data);
   };
 
   const fetchEmployees = async () => {
-    const { data, error } = await supabase
-      .from('employees')
-      .select('*')
-      .order('name', { ascending: true });
+    const { data, error } = await supabase.from('employees').select('*').order('name', { ascending: true });
     if (!error) setEmployees(data);
   };
 
   const fetchTimeCards = async () => {
-    const { data, error } = await supabase
-      .from('time_cards')
-      .select('*')
-      .order('clock_in', { ascending: false });
+    const { data, error } = await supabase.from('time_cards').select('*').order('clock_in', { ascending: false });
     if (!error) setTimeCards(data);
   };
 
   const calculatePayroll = () => {
-    const filteredEmployees = selectedEmployee === 'all'
+    const filtered = selectedEmployee === 'all'
       ? employees
       : employees.filter(emp => emp.id === selectedEmployee);
-
-    return filteredEmployees.map(employee => {
-      const employeeTimeCards = timeCards.filter(card =>
-        card.employee_id === employee.id &&
-        new Date(card.clock_in) >= payPeriodStart &&
-        new Date(card.clock_in) <= payPeriodEnd &&
-        card.clock_out
+    return filtered.map(employee => {
+      const cards = timeCards.filter(c =>
+        c.employee_id === employee.id &&
+        new Date(c.clock_in) >= payPeriodStart &&
+        new Date(c.clock_in) <= payPeriodEnd &&
+        c.clock_out
       );
-
-      let totalHours = 0;
-      employeeTimeCards.forEach(card => {
-        const clockIn = new Date(card.clock_in);
-        const clockOut = new Date(card.clock_out);
-        totalHours += (clockOut - clockIn) / (1000 * 60 * 60);
-      });
-
-      const grossPay = totalHours * employee.hourly_rate;
-      const taxes = grossPay * 0.15;
-      const deductions = 0;
-      const netPay = grossPay - taxes - deductions;
-
+      let total = cards.reduce((sum, c) =>
+        sum + ((new Date(c.clock_out) - new Date(c.clock_in)) / 3600000), 0
+      );
+      const gross = total * employee.hourly_rate;
+      const tax = gross * 0.15;
+      const deduction = 0;
+      const net = gross - tax - deduction;
       return {
         employee_id: employee.id,
         employee_name: employee.name,
-        hours_worked: totalHours.toFixed(2),
+        hours_worked: total.toFixed(2),
         hourly_rate: employee.hourly_rate,
-        gross_pay: grossPay.toFixed(2),
-        taxes: taxes.toFixed(2),
-        deductions: deductions.toFixed(2),
-        net_pay: netPay.toFixed(2),
+        gross_pay: gross.toFixed(2),
+        taxes: tax.toFixed(2),
+        deductions: deduction.toFixed(2),
+        net_pay: net.toFixed(2),
         pay_period_start: payPeriodStart.toISOString(),
-        pay_period_end: payPeriodEnd.toISOString()
+        pay_period_end: payPeriodEnd.toISOString(),
+        status: 'pending',
+        notes: ''
       };
     });
   };
 
-  const generatePayroll = () => {
-    setShowPayrollForm(true);
-  };
+  const generatePayroll = () => setShowPayrollForm(true);
 
   const savePayrollsToDB = async () => {
-    const payrollData = calculatePayroll().map(p => ({
-      employee_id: p.employee_id,
-      hours_worked: p.hours_worked,
-      hourly_rate: p.hourly_rate,
-      gross_pay: p.gross_pay,
-      taxes: p.taxes,
-      deductions: p.deductions,
-      net_pay: p.net_pay,
-      pay_period_start: p.pay_period_start,
-      pay_period_end: p.pay_period_end,
-      status: 'paid'
-    }));
-
-    const { error } = await supabase.from('payrolls').insert(payrollData);
-
-    if (error) {
-      console.error('Error saving payroll:', error);
-      alert('Failed to save payroll');
-    } else {
-      alert('Payroll processed and saved successfully!');
+    const data = calculatePayroll().map(p => ({ ...p }));
+    const { error } = await supabase.from('payrolls').insert(data);
+    if (error) alert('Failed to save payroll');
+    else {
+      alert('Payroll saved!');
       setShowPayrollForm(false);
       fetchPayrolls();
     }
   };
 
-  const exportToPDF = (payroll) => {
+  const exportToPDF = (row, all) => {
     const doc = new jsPDF();
-    const fileName = `payroll_${payroll.employee_id}_${new Date().toISOString().slice(0, 10)}.pdf`;
+    if (all) doc.text('All Payrolls', 14, 14);
+    else {
+      doc.text(`Payroll: ${row.employee_name}`, 14, 14);
+      doc.text(`Period: ${new Date(row.pay_period_start).toLocaleDateString()} - ${new Date(row.pay_period_end).toLocaleDateString()}`, 14, 24);
+    }
+    const body = all
+      ? payrolls.map(r => [r.employee?.name, r.hours_worked, r.net_pay, r.status])
+      : [['Hours Worked', row.hours_worked], ['Net Pay', row.net_pay], ['Status', row.status], ['Notes', row.notes || '-']];
+    const head = all ? [['Employee', 'Hours', 'Net Pay', 'Status']] : [['Field', 'Value']];
+    autoTable(doc, { startY: all ? 24 : 34, head, body });
+    doc.save(all ? 'all_payrolls.pdf' : `payroll_${row.employee_id}.pdf`);
+  };
 
-    doc.setFontSize(18);
-    doc.text('Payroll Statement', 105, 20, { align: 'center' });
-    doc.setFontSize(12);
-    doc.setTextColor(100);
-    doc.text(`Pay Period: ${new Date(payroll.pay_period_start).toLocaleDateString()} - ${new Date(payroll.pay_period_end).toLocaleDateString()}`, 105, 30, { align: 'center' });
+  const registerEmployee = async () => {
+    if (!newEmployeeName || !newEmployeeRate || !newEmployeeRole) return alert('Fill all fields');
+    let photoUrl = null;
+    if (newEmployeePhoto) {
+      const { data: upload, error: upErr } = await supabase
+        .storage.from('avatars').upload(`avatars/${Date.now()}`, newEmployeePhoto);
+      if (upErr) return alert('Upload failed');
+      photoUrl = supabase.storage.from('avatars').getPublicUrl(upload.path).publicURL;
+    }
+    const { error } = await supabase.from('employees').insert([{ name: newEmployeeName, hourly_rate: parseFloat(newEmployeeRate), role: newEmployeeRole, photo: photoUrl }]);
+    if (error) alert('Registration failed');
+    else {
+      alert('Employee registered!');
+      setNewEmployeeName(''); setNewEmployeeRate(''); setNewEmployeeRole(''); setNewEmployeePhoto(null);
+      fetchEmployees();
+    }
+  };
 
-    doc.setFontSize(14);
-    doc.setTextColor(0);
-    doc.text(`Employee: ${payroll.employees?.name || payroll.employee_name || 'Unknown'}`, 14, 45);
-
-    autoTable(doc, {
-      startY: 55,
-      head: [['Description', 'Amount']],
-      body: [
-        ['Hours Worked', payroll.hours_worked],
-        ['Hourly Rate', `$${payroll.hourly_rate}`],
-        ['Gross Pay', `$${payroll.gross_pay}`],
-        ['Taxes', `$${payroll.taxes}`],
-        ['Deductions', `$${payroll.deductions}`],
-        ['Net Pay', `$${payroll.net_pay}`]
-      ],
-      styles: { fontSize: 11 },
-      headStyles: { fillColor: [59, 130, 246] },
-      columnStyles: {
-        0: { fontStyle: 'bold' },
-        1: { halign: 'right' }
-      }
-    });
-
-    doc.save(fileName);
+  const toggleStatus = async (id, current) => {
+    const next = current === 'paid' ? 'pending' : 'paid';
+    await supabase.from('payrolls').update({ status: next }).eq('id', id);
+    fetchPayrolls();
   };
 
   return (
     <Layout>
       <div className="p-6 bg-gray-50 min-h-screen">
-        <h1 className="text-3xl font-bold text-gray-800 mb-6">Payroll Management</h1>
+        <h1 className="text-3xl mb-6">Payroll Management</h1>
 
-        {/* Payroll Controls */}
-        <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Generate Payroll</h2>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-            <div>
-              <label className="block text-sm font-medium mb-1">Pay Period Start</label>
-              <DatePicker
-                selected={payPeriodStart}
-                onChange={date => setPayPeriodStart(date)}
-                className="w-full border border-gray-300 rounded px-3 py-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Pay Period End</label>
-              <DatePicker
-                selected={payPeriodEnd}
-                onChange={date => setPayPeriodEnd(date)}
-                className="w-full border border-gray-300 rounded px-3 py-2"
-                minDate={payPeriodStart}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-1">Employee</label>
-              <select
-                className="w-full border border-gray-300 rounded px-3 py-2"
-                value={selectedEmployee}
-                onChange={e => setSelectedEmployee(e.target.value)}
-              >
-                <option value="all">All Employees</option>
-                {employees.map(emp => (
-                  <option key={emp.id} value={emp.id}>{emp.name}</option>
-                ))}
-              </select>
-            </div>
+        {/* Employee Registration */}
+        <div className="bg-white p-4 rounded shadow mb-6">
+          <h2 className="text-xl mb-4">Register New Employee</h2>
+          <div className="grid md:grid-cols-4 gap-4">
+            <input placeholder="Name" value={newEmployeeName} onChange={e => setNewEmployeeName(e.target.value)} className="border p-2 rounded"/>
+            <input placeholder="Rate" value={newEmployeeRate} onChange={e => setNewEmployeeRate(e.target.value)} className="border p-2 rounded"/>
+            <input placeholder="Role" value={newEmployeeRole} onChange={e => setNewEmployeeRole(e.target.value)} className="border p-2 rounded"/>
+            <input type="file" ref={fileInputRef} onChange={e => setNewEmployeePhoto(e.target.files[0])} className="border p-2 rounded"/>
+            <button onClick={registerEmployee} className="col-span-full bg-green-600 text-white py-2 rounded">Register</button>
           </div>
-          <button
-            onClick={generatePayroll}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg"
-          >
-            Calculate Payroll
-          </button>
         </div>
 
+        {/* Payroll Controls */}
+        <div className="bg-white p-6 rounded shadow mb-6">
+          <h2 className="text-xl mb-4">Generate Payroll</h2>
+          <div className="grid md:grid-cols-4 gap-4 mb-4">
+            <DatePicker selected={payPeriodStart} onChange={setPayPeriodStart} className="border p-2 rounded"/>
+            <DatePicker selected={payPeriodEnd} onChange={setPayPeriodEnd} className="border p-2 rounded"/>
+            <select value={selectedEmployee} onChange={e => setSelectedEmployee(e.target.value)} className="border p-2 rounded">
+              <option value="all">All Employees</option>
+              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+            </select>
+            <button onClick={generatePayroll} className="bg-blue-600 text-white py-2 rounded">Calculate</button>
+          </div>
+        </div>
+
+        {/* Payroll Preview */}
         {showPayrollForm && (
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6">
-            <h2 className="text-xl font-semibold mb-4">Payroll Preview</h2>
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="px-4 py-2 text-left">Employee</th>
-                    <th className="px-4 py-2 text-left">Hours</th>
-                    <th className="px-4 py-2 text-left">Rate</th>
-                    <th className="px-4 py-2 text-left">Gross Pay</th>
-                    <th className="px-4 py-2 text-left">Taxes</th>
-                    <th className="px-4 py-2 text-left">Deductions</th>
-                    <th className="px-4 py-2 text-left">Net Pay</th>
-                    <th className="px-4 py-2 text-left">Actions</th>
+          <div className="bg-white p-6 rounded shadow mb-6">
+            <h2 className="text-xl mb-4">Preview</h2>
+            <table className="min-w-full mb-4">
+              <thead className="bg-gray-100"><tr><th>Name</th><th>Hours</th><th>Gross</th><th>Net</th><th>Taxes</th><th>Actions</th></tr></thead>
+              <tbody>
+                {calculatePayroll().map((r,i) =>
+                  <tr key={i} className="border-b">
+                    <td>{r.employee_name}</td><td>{r.hours_worked}</td><td>${r.gross_pay}</td><td>${r.net_pay}</td><td>${r.taxes}</td>
+                    <td><button onClick={() => exportToPDF(r)}><FiDownload /></button></td>
                   </tr>
-                </thead>
-                <tbody>
-                  {calculatePayroll().map((payroll, index) => (
-                    <tr key={index} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-2">{payroll.employee_name}</td>
-                      <td className="px-4 py-2">{payroll.hours_worked}</td>
-                      <td className="px-4 py-2">${payroll.hourly_rate}</td>
-                      <td className="px-4 py-2">${payroll.gross_pay}</td>
-                      <td className="px-4 py-2">${payroll.taxes}</td>
-                      <td className="px-4 py-2">${payroll.deductions}</td>
-                      <td className="px-4 py-2 font-semibold">${payroll.net_pay}</td>
-                      <td className="px-4 py-2">
-                        <button
-                          onClick={() => exportToPDF({
-                            ...payroll,
-                            employees: { name: payroll.employee_name }
-                          })}
-                          className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                        >
-                          <FiDownload /> PDF
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={savePayrollsToDB}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg"
-              >
-                Process Payroll
-              </button>
-              <button
-                onClick={() => setShowPayrollForm(false)}
-                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-lg"
-              >
-                Cancel
-              </button>
-            </div>
+                )}
+                <tr className="font-bold"><td>Total</td><td>{calculatePayroll().reduce((sum,r)=>sum+parseFloat(r.hours_worked),0).toFixed(2)}</td><td></td><td>${calculatePayroll().reduce((sum,r)=>sum+parseFloat(r.net_pay),0).toFixed(2)}</td><td></td><td></td></tr>
+              </tbody>
+            </table>
+            <button onClick={savePayrollsToDB} className="bg-green-600 text-white py-2 mr-2 rounded">Process</button>
+            <button onClick={() => setShowPayrollForm(false)} className="bg-gray-500 text-white py-2 rounded">Cancel</button>
           </div>
         )}
 
+        {/* Filters & Export */}
+        <div className="bg-white p-4 rounded shadow mb-4 flex gap-4">
+          <DatePicker selected={filterStart} onChange={setFilterStart} placeholderText="Filter start" className="border p-2 rounded"/>
+          <DatePicker selected={filterEnd} onChange={setFilterEnd} placeholderText="Filter end" className="border p-2 rounded"/>
+          <button onClick={fetchPayrolls} className="bg-blue-600 text-white py-2 rounded">Apply Filter</button>
+          <button onClick={() => exportToPDF(null, true)} className="bg-blue-500 text-white py-2 rounded">Export All</button>
+        </div>
+
         {/* Payroll History */}
-        <div className="bg-white rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold mb-4">Payroll History</h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full">
-              <thead className="bg-gray-100">
-                <tr>
-                  <th className="px-4 py-2 text-left">Pay Period</th>
-                  <th className="px-4 py-2 text-left">Employee</th>
-                  <th className="px-4 py-2 text-left">Net Pay</th>
-                  <th className="px-4 py-2 text-left">Status</th>
-                  <th className="px-4 py-2 text-left">Actions</th>
+        <div className="bg-white p-6 rounded shadow">
+          <h2 className="text-xl mb-4">History</h2>
+          <table className="min-w-full">
+            <thead className="bg-gray-100"><tr><th>Period</th><th>Name</th><th>Net</th><th>Status</th><th>Notes</th><th>Actions</th></tr></thead>
+            <tbody>
+              {payrolls.map(r =>
+                <tr key={r.id} className="border-b hover:bg-gray-50">
+                  <td>{new Date(r.pay_period_start).toLocaleDateString()}–{new Date(r.pay_period_end).toLocaleDateString()}</td>
+                  <td>{r.employee?.name}</td>
+                  <td>${parseFloat(r.net_pay).toFixed(2)}</td>
+                  <td>
+                    <button onClick={() => toggleStatus(r.id, r.status)} className={`px-2 py-1 rounded ${r.status==='paid'?'bg-green-200':'bg-yellow-200'}`}>{r.status}</button>
+                  </td>
+                  <td><input defaultValue={r.notes} onBlur={async e=> {
+                    await supabase.from('payrolls').update({ notes: e.target.value }).eq('id',r.id);
+                    fetchPayrolls();
+                  }} className="border p-1 rounded w-full"/></td>
+                  <td><button onClick={() => exportToPDF(r)}><FiDownload /></button></td>
                 </tr>
-              </thead>
-              <tbody>
-                {payrolls.map(payroll => (
-                  <tr key={payroll.id} className="border-b hover:bg-gray-50">
-                    <td className="px-4 py-2">
-                      {new Date(payroll.pay_period_start).toLocaleDateString()} - {new Date(payroll.pay_period_end).toLocaleDateString()}
-                    </td>
-                    <td className="px-4 py-2">{payroll.employees?.name || 'Unknown'}</td>
-                    <td className="px-4 py-2">${parseFloat(payroll.net_pay).toFixed(2)}</td>
-                    <td className="px-4 py-2">
-                      <span className={`px-2 py-1 rounded text-xs ${
-                        payroll.status === 'paid' ? 'bg-green-100 text-green-800' :
-                        payroll.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                      }`}>
-                        {payroll.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2">
-                      <button
-                        onClick={() => exportToPDF(payroll)}
-                        className="text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                      >
-                        <FiDownload /> PDF
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+              )}
+              <tr className="font-bold"><td colSpan="2">Totals</td><td>${payrolls.reduce((sum,r)=>sum+parseFloat(r.net_pay),0).toFixed(2)}</td><td></td><td></td><td></td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </Layout>
   );
-};
-
-export default Payroll;
+}
