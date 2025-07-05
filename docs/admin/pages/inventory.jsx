@@ -1587,24 +1587,7 @@ const Inventory = () => {
                             ))}
                           </div>
                         </td>
-                        <td className="px-4 py-2">
-                          <div className="flex">
-                            <input
-                              type="text"
-                              value={editBarcode}
-                              onChange={(e) => setEditBarcode(e.target.value)}
-                              className="flex-1 border border-gray-300 rounded-l px-2 py-1 text-sm"
-                              placeholder="Barcode"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => setShowScanner(true)}
-                              className="bg-orange-600 hover:bg-orange-700 text-white px-2 py-1 rounded-r text-sm"
-                            >
-                              Scan
-                            </button>
-                          </div>
-                        </td>
+                      
                         <td className="px-4 py-2 space-x-2">
                           <button
                             onClick={() => saveEdit(product.id)}
