@@ -96,6 +96,7 @@ export default function CustomersAndSuppliers() {
                 <a href="/" className="text-blue-600 hover:underline">Dashboard</a>
               </li>
               <li>/</li>
+              <li className="font-semibold">Customers & Suppliers</li>
             </ol>
           </nav>
         
