@@ -94,10 +94,10 @@ const App = () => {
           }
         />
         <Route
-          path="/settings"
+          path="/customer"
           element={
             <ProtectedRoute>
-              <Settings />
+              <Customer />
             </ProtectedRoute>
           }
         />
