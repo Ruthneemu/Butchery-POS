@@ -18,7 +18,7 @@ const Inventory = () => {
   const [sellingPrice, setSellingPrice] = useState('');
   const [newImage, setNewImage] = useState(null);
   const [newVariant, setNewVariant] = useState('');
-  const [variants, setVariants] = useState([]);
+ 
 
   // Bulk import states
   const [bulkData, setBulkData] = useState('');
@@ -33,8 +33,7 @@ const Inventory = () => {
   const [editUnit, setEditUnit] = useState('kg');
   const [editSellingPrice, setEditSellingPrice] = useState('');
   const [editImage, setEditImage] = useState(null);
-  const [editVariant, setEditVariant] = useState('');
-  const [editVariants, setEditVariants] = useState([]);
+  
 
   // Stock Adjustment states
   const [showStockAdjustment, setShowStockAdjustment] = useState(false);
@@ -193,7 +192,7 @@ const Inventory = () => {
             price: Number(newPrice),
             unit: newUnit,
             selling_price: Number(sellingPrice) || Number(newPrice) * 1.2,
-            variants: variants.length > 0 ? variants : null
+            
           },
         ])
         .select()
@@ -222,7 +221,7 @@ const Inventory = () => {
       setNewUnit('kg');
       setSellingPrice('');
       setNewImage(null);
-      setVariants([]);
+     
       setNewVariant('');
 
       fetchProducts();
@@ -231,31 +230,7 @@ const Inventory = () => {
     }
   };
 
-  // Add variant to new product
-  const addVariant = () => {
-    if (newVariant && !variants.includes(newVariant)) {
-      setVariants([...variants, newVariant]);
-      setNewVariant('');
-    }
-  };
 
-  // Remove variant from new product
-  const removeVariant = (variantToRemove) => {
-    setVariants(variants.filter(v => v !== variantToRemove));
-  };
-
-  // Add variant to edited product
-  const addEditVariant = () => {
-    if (editVariant && !editVariants.includes(editVariant)) {
-      setEditVariants([...editVariants, editVariant]);
-      setEditVariant('');
-    }
-  };
-
-  // Remove variant from edited product
-  const removeEditVariant = (variantToRemove) => {
-    setEditVariants(editVariants.filter(v => v !== variantToRemove));
-  };
 
   // Delete product
   const deleteProduct = async (id) => {
@@ -278,7 +253,7 @@ const Inventory = () => {
     setEditPrice(product.price ?? '');
     setEditUnit(product.unit ?? 'kg');
     setEditSellingPrice(product.selling_price ?? '');
-    setEditVariants(product.variants || []);
+    
   };
 
   // Cancel editing
@@ -289,7 +264,6 @@ const Inventory = () => {
     setEditExpiry('');
     setEditUnit('kg');
     setEditSellingPrice('');
-    setEditVariants([]);
     setEditVariant('');
     setEditImage(null);
   };
@@ -309,7 +283,6 @@ const Inventory = () => {
         price: Number(editPrice),
         unit: editUnit,
         selling_price: Number(editSellingPrice) || Number(editPrice) * 1.2,
-        variants: editVariants.length > 0 ? editVariants : null
       };
 
       // Upload new image if provided
@@ -661,15 +634,14 @@ const Inventory = () => {
 
   // Prepare CSV data for export
   const csvData = [
-    ['Name', 'Quantity', 'Price', 'Unit', 'Expiry Date', 'Selling Price', 'Variants'],
+    ['Name', 'Quantity', 'Price', 'Unit', 'Expiry Date', 'Selling Price'],
     ...products.map(product => [
       product.name,
       product.quantity,
       product.price,
       product.unit,
       product.expiry_date || '',
-      product.selling_price || '',
-      product.variants ? product.variants.join(';') : ''
+      product.selling_price || ''
     ])
   ];
 
@@ -1193,42 +1165,6 @@ const Inventory = () => {
             </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="block mb-1 font-medium">Variants</label>
-            <div className="flex space-x-2">
-              <input
-                type="text"
-                className="flex-1 border border-gray-300 rounded px-3 py-2"
-                value={newVariant}
-                onChange={(e) => setNewVariant(e.target.value)}
-                placeholder="e.g., Large, Small, Frozen"
-              />
-              <button
-                type="button"
-                onClick={addVariant}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-              >
-                Add
-              </button>
-            </div>
-            {variants.length > 0 && (
-              <div className="flex flex-wrap gap-2 mt-2">
-                {variants.map((variant) => (
-                  <span key={variant} className="bg-gray-200 px-3 py-1 rounded-full flex items-center">
-                    {variant}
-                    <button
-                      type="button"
-                      onClick={() => removeVariant(variant)}
-                      className="ml-2 text-red-600 hover:text-red-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-            )}
-          </div>
-
           <button
             type="submit"
             className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-semibold"
@@ -1255,7 +1191,6 @@ const Inventory = () => {
                   <th className="px-4 py-2 text-left text-sm">Price</th>
                   <th className="px-4 py-2 text-left text-sm">Selling Price</th>
                   <th className="px-4 py-2 text-left text-sm">Unit</th>
-                  <th className="px-4 py-2 text-left text-sm">Variants</th>
                   <th className="px-4 py-2 text-left text-sm">Actions</th>
                 </tr>
               </thead>
@@ -1350,38 +1285,6 @@ const Inventory = () => {
                             <option value="liter">liter</option>
                           </select>
                         </td>
-                        <td className="px-4 py-2">
-                          <div className="flex space-x-2 mb-2">
-                            <input
-                              type="text"
-                              value={editVariant}
-                              onChange={(e) => setEditVariant(e.target.value)}
-                              className="flex-1 border border-gray-300 rounded px-2 py-1 text-sm"
-                              placeholder="Add variant"
-                            />
-                            <button
-                              type="button"
-                              onClick={addEditVariant}
-                              className="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-sm"
-                            >
-                              Add
-                            </button>
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {editVariants.map((variant) => (
-                              <span key={variant} className="bg-gray-200 px-2 py-0.5 rounded-full text-xs flex items-center">
-                                {variant}
-                                <button
-                                  type="button"
-                                  onClick={() => removeEditVariant(variant)}
-                                  className="ml-1 text-red-600 hover:text-red-800"
-                                >
-                                  ×
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                        </td>
                       
                         <td className="px-4 py-2 space-x-2">
                           <button
@@ -1460,17 +1363,6 @@ const Inventory = () => {
                       <td className="px-4 py-2">KSh {product.price?.toLocaleString()}</td>
                       <td className="px-4 py-2">KSh {product.selling_price?.toLocaleString()}</td>
                       <td className="px-4 py-2">{product.unit}</td>
-                      <td className="px-4 py-2">
-                        {product.variants?.length > 0 ? (
-                          <div className="flex flex-wrap gap-1">
-                            {product.variants.map(variant => (
-                              <span key={variant} className="bg-gray-200 px-2 py-0.5 rounded-full text-xs">
-                                {variant}
-                              </span>
-                            ))}
-                          </div>
-                        ) : 'N/A'}
-                      </td>
                       <td className="px-4 py-2 space-x-2">
                         {!stockTakeMode && (
                           <>
