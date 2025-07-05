@@ -100,13 +100,7 @@ export default function CustomersAndSuppliers() {
               <li className="text-gray-700">Customers & Suppliers</li>
             </ol>
           </nav>
-          <button
-            onClick={() => setShowBreadcrumb(false)}
-            className="text-gray-500 hover:text-red-600 text-xl font-bold leading-none ml-4"
-            aria-label="Close breadcrumb"
-          >
-            &times;
-          </button>
+        
         </div>
       )}
 
