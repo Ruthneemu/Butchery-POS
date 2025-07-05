@@ -116,47 +116,47 @@ const Dashboard = () => {
 
       {/* Alert Banner */}
       {summary.lowStock > 0 && (
-        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-6">
-          ⚠️ {summary.lowStock} products are running low!
-          <Link to="/inventory" className="underline font-semibold ml-2">Review now</Link>
+        <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-800 p-4 rounded mb-6">
+          ⚠️ {summary.lowStock} product(s) are running low in stock!
+          <Link to="/inventory" className="underline font-medium ml-2">Review now</Link>
         </div>
       )}
 
       {/* Sales Trend Chart */}
       <div className="bg-white p-4 rounded shadow mb-6">
-        <h2 className="text-lg font-semibold mb-4">Sales Trend (Last 7 Days)</h2>
+        <h2 className="text-lg font-semibold mb-4">📈 Sales Trend (Last 7 Days)</h2>
         <div className="w-full h-[250px] sm:h-[300px]">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={salesTrend}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="day" />
-            <YAxis />
-            <Tooltip />
-            <Line type="monotone" dataKey="amount" stroke="#10B981" strokeWidth={2} />
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={salesTrend}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey="day" />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="amount" stroke="#10B981" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       {/* Recent Sales Table */}
       <div className="bg-white rounded shadow p-4 mb-6 overflow-x-auto">
-        <h2 className="text-xl font-semibold mb-4">Recent Sales</h2>
+        <h2 className="text-lg font-semibold mb-4">🧾 Recent Sales</h2>
         <table className="min-w-[500px] w-full text-left text-sm sm:text-base">
           <thead>
-            <tr className="border-b">
-              <th className="py-2">Product</th>
-              <th>Qty</th>
-              <th>Amount</th>
-              <th>Time</th>
+            <tr className="border-b bg-gray-50 text-gray-700">
+              <th className="py-2 px-2">Product</th>
+              <th className="py-2 px-2">Qty</th>
+              <th className="py-2 px-2">Amount</th>
+              <th className="py-2 px-2">Time</th>
             </tr>
           </thead>
           <tbody>
             {recentSales.map((sale) => (
-              <tr key={sale.id} className="border-b hover:bg-gray-100">
-                <td className="py-2">{sale.product}</td>
-                <td>{sale.qty}</td>
-                <td>KES {sale.amount}</td>
-                <td>{sale.time}</td>
+              <tr key={sale.id} className="border-b hover:bg-gray-50">
+                <td className="py-2 px-2">{sale.product}</td>
+                <td className="py-2 px-2">{sale.qty}</td>
+                <td className="py-2 px-2">KES {sale.amount}</td>
+                <td className="py-2 px-2">{sale.time}</td>
               </tr>
             ))}
           </tbody>
@@ -165,10 +165,10 @@ const Dashboard = () => {
 
       {/* Help Section */}
       <div className="bg-gray-100 text-gray-700 p-4 rounded shadow text-sm sm:text-base">
-        <h3 className="font-bold mb-1">Need Help?</h3>
-        <p className="text-sm">
-          📞 Call: +254 712 345 678 <br />
-          📄 Quick Guide: <Link className="underline" to="/help">How to add a new product</Link>
+        <h3 className="font-bold mb-1">💡 Need Help?</h3>
+        <p>
+          📞 Call: <a href="tel:+254712345678" className="underline">+254 712 345 678</a><br />
+          📄 Guide: <Link to="/help" className="underline">How to add a new product</Link>
         </p>
       </div>
     </Layout>
