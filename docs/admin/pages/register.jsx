@@ -97,13 +97,4 @@ export default function Register() {
       </div>
     </div>
   );
-}            onClick={() => navigate('/login')}
-            className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 py-2 px-4 rounded-lg text-sm font-medium transition"
-          >
-             Login
-          </button>
-        </div>
-      </div>
-    </div>
-  );
 }
