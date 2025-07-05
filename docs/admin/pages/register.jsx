@@ -6,38 +6,34 @@ export default function Register() {
   const navigate = useNavigate();
 
   const [email, setEmail] = useState('');
-  const [pin, setPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
 
   const handleRegister = async () => {
     setMessage(null);
 
-    if (!/^\d{4}$/.test(pin)) {
-      setMessage({ type: 'error', text: 'PIN must be 4 digits' });
+    if (password.length < 6) {
+      setMessage({ type: 'error', text: 'Password must be at least 6 characters' });
       return;
     }
 
-    if (pin !== confirmPin) {
-      setMessage({ type: 'error', text: "PINs don't match" });
+    if (password !== confirmPassword) {
+      setMessage({ type: 'error', text: "Passwords don't match" });
       return;
     }
-
-    // Pad the PIN to meet Supabase's minimum password length requirement
-    const paddedPin = pin.padEnd(6, '0');
 
     setLoading(true);
     const { error } = await supabase.auth.signUp({ 
       email, 
-      password: paddedPin 
+      password 
     });
     setLoading(false);
 
     if (error) {
       setMessage({ type: 'error', text: error.message });
     } else {
-      // Redirect to login page after success
       navigate('/login');
     }
   };
@@ -67,23 +63,19 @@ export default function Register() {
         />
         <input
           type="password"
-          placeholder="4-digit PIN"
-          value={pin}
-          onChange={(e) => setPin(e.target.value)}
+          placeholder="Password (min 6 characters)"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
           className="w-full p-3 mb-4 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-          maxLength={4}
-          inputMode="numeric"
-          pattern="\d{4}"
+          autoComplete="new-password"
         />
         <input
           type="password"
-          placeholder="Confirm 4-digit PIN"
-          value={confirmPin}
-          onChange={(e) => setConfirmPin(e.target.value)}
+          placeholder="Confirm Password"
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
           className="w-full p-3 mb-6 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-400"
-          maxLength={4}
-          inputMode="numeric"
-          pattern="\d{4}"
+          autoComplete="new-password"
         />
         <button
           onClick={handleRegister}
@@ -97,6 +89,15 @@ export default function Register() {
           <p>Already have an account?</p>
           <button
             onClick={() => navigate('/login')}
+            className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 py-2 px-4 rounded-lg text-sm font-medium transition"
+          >
+            Login
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}            onClick={() => navigate('/login')}
             className="w-full bg-gray-100 hover:bg-gray-200 text-gray-800 py-2 px-4 rounded-lg text-sm font-medium transition"
           >
              Login

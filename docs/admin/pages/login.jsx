@@ -4,9 +4,9 @@ import { useNavigate } from 'react-router-dom';
 
 export default function Login() {
   const [email, setEmail] = useState('');
-  const [pin, setPin] = useState('');
-  const [newPin, setNewPin] = useState('');
-  const [confirmPin, setConfirmPin] = useState('');
+  const [password, setPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState(null);
   const [mode, setMode] = useState('login'); // 'login' | 'reset' | 'update'
@@ -32,12 +32,12 @@ export default function Login() {
       if (event === 'USER_UPDATED') {
         setMessage({
           type: 'success',
-          text: 'PIN updated successfully! Redirecting...'
+          text: 'Password updated successfully! Redirecting...'
         });
         await new Promise(resolve => setTimeout(resolve, 2000));
         setMode('login');
-        setNewPin('');
-        setConfirmPin('');
+        setNewPassword('');
+        setConfirmPassword('');
         setMessage(null);
       }
     });
@@ -48,26 +48,23 @@ export default function Login() {
   }, []);
 
   const handleLogin = async () => {
-    if (!validatePin(pin)) {
-      setMessage({ type: 'error', text: 'PIN must be 4 digits' });
+    if (password.length < 6) {
+      setMessage({ type: 'error', text: 'Password must be at least 6 characters' });
       return;
     }
-
-    // Pad the PIN to meet Supabase's minimum password length requirement
-    const paddedPin = pin.padEnd(6, '0');
 
     setMessage(null);
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ 
       email, 
-      password: paddedPin 
+      password 
     });
     setLoading(false);
     if (error) setMessage({ type: 'error', text: error.message });
     else navigate('/dashboard');
   };
 
-  const handlePinReset = async () => {
+  const handlePasswordReset = async () => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!email || !emailRegex.test(email)) {
       setMessage({ type: 'error', text: 'Please enter a valid email address' });
@@ -83,7 +80,7 @@ export default function Login() {
       if (error) throw error;
       setMessage({
         type: 'success',
-        text: 'PIN reset link sent to your email! Please check your inbox.'
+        text: 'Password reset link sent to your email! Please check your inbox.'
       });
     } catch (error) {
       setMessage({ type: 'error', text: error.message });
@@ -92,41 +89,32 @@ export default function Login() {
     }
   };
 
-  const handlePinUpdate = async () => {
-    if (!validatePin(newPin)) {
-      setMessage({ type: 'error', text: 'PIN must be 4 digits' });
+  const handlePasswordUpdate = async () => {
+    if (newPassword.length < 6) {
+      setMessage({ type: 'error', text: 'Password must be at least 6 characters' });
       return;
     }
-    if (newPin !== confirmPin) {
-      setMessage({ type: 'error', text: 'PINs do not match' });
+    if (newPassword !== confirmPassword) {
+      setMessage({ type: 'error', text: 'Passwords do not match' });
       return;
     }
-
-    // Pad the new PIN to meet Supabase's minimum password length requirement
-    const paddedPin = newPin.padEnd(6, '0');
 
     setMessage(null);
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password: paddedPin });
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
-      
-      // The USER_UPDATED event in the auth listener will handle the success case
     } catch (error) {
       setMessage({ type: 'error', text: error.message });
       setLoading(false);
     }
   };
 
-  const validatePin = (pin) => {
-    return /^\d{4}$/.test(pin);
-  };
-
   return (
     <div className="flex flex-col justify-center items-center min-h-screen bg-cover bg-center bg-no-repeat px-4 sm:px-6 md:px-8" style={{ backgroundImage: "url('/leaf.jpg')" }}>
       <div className="bg-white bg-opacity-90 backdrop-blur-md p-8 rounded-2xl shadow-xl w-full max-w-md">
         <h2 className="text-3xl font-bold mb-6 text-center text-gray-800">
-          {mode === 'login' ? 'Login' : mode === 'reset' ? 'Reset PIN' : 'Update PIN'}
+          {mode === 'login' ? 'Login' : mode === 'reset' ? 'Reset Password' : 'Update Password'}
         </h2>
 
         {message && (
@@ -149,13 +137,11 @@ export default function Login() {
               />
               <input
                 type="password"
-                placeholder="4-digit PIN"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
                 className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-400 focus:border-blue-400"
-                maxLength={4}
-                inputMode="numeric"
-                pattern="\d{4}"
+                autoComplete="current-password"
               />
               <button
                 onClick={handleLogin}
@@ -171,7 +157,7 @@ export default function Login() {
               onClick={() => setMode('reset')}
               className="mt-4 text-sm text-blue-600 hover:underline"
             >
-              Forgot PIN?
+              Forgot Password?
             </button>
 
             <div className="mt-6 text-center">
@@ -187,7 +173,7 @@ export default function Login() {
         ) : mode === 'reset' ? (
           <div className="space-y-4">
             <p className="text-gray-600 text-sm mb-4">
-              Enter your email address and we'll send you a link to reset your PIN.
+              Enter your email address and we'll send you a link to reset your password.
             </p>
             <input
               type="email"
@@ -199,7 +185,7 @@ export default function Login() {
               autoFocus
             />
             <button
-              onClick={handlePinReset}
+              onClick={handlePasswordReset}
               disabled={loading}
               className={`w-full text-white py-3 rounded-lg font-semibold ${
                 loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
@@ -217,37 +203,33 @@ export default function Login() {
         ) : (
           <div className="space-y-4">
             <p className="text-gray-600 text-sm mb-4">
-              Please enter your new 4-digit PIN below.
+              Please enter your new password below.
             </p>
             <input
               type="password"
-              placeholder="New 4-digit PIN"
-              value={newPin}
-              onChange={(e) => setNewPin(e.target.value)}
+              placeholder="New password"
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-400 focus:border-blue-400"
-              maxLength={4}
-              inputMode="numeric"
-              pattern="\d{4}"
+              autoComplete="new-password"
               autoFocus
             />
             <input
               type="password"
-              placeholder="Confirm 4-digit PIN"
-              value={confirmPin}
-              onChange={(e) => setConfirmPin(e.target.value)}
+              placeholder="Confirm new password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-blue-400 focus:border-blue-400"
-              maxLength={4}
-              inputMode="numeric"
-              pattern="\d{4}"
+              autoComplete="new-password"
             />
             <button
-              onClick={handlePinUpdate}
+              onClick={handlePasswordUpdate}
               disabled={loading}
               className={`w-full text-white py-3 rounded-lg font-semibold ${
                 loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
               }`}
             >
-              {loading ? 'Updating...' : 'Update PIN'}
+              {loading ? 'Updating...' : 'Update Password'}
             </button>
             <button
               onClick={() => setMode('login')}
