@@ -53,11 +53,14 @@ export default function Login() {
       return;
     }
 
+    // Pad the PIN to meet Supabase's minimum password length requirement
+    const paddedPin = pin.padEnd(6, '0');
+
     setMessage(null);
     setLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ 
       email, 
-      password: pin 
+      password: paddedPin 
     });
     setLoading(false);
     if (error) setMessage({ type: 'error', text: error.message });
@@ -99,10 +102,13 @@ export default function Login() {
       return;
     }
 
+    // Pad the new PIN to meet Supabase's minimum password length requirement
+    const paddedPin = newPin.padEnd(6, '0');
+
     setMessage(null);
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({ password: newPin });
+      const { error } = await supabase.auth.updateUser({ password: paddedPin });
       if (error) throw error;
       
       // The USER_UPDATED event in the auth listener will handle the success case
