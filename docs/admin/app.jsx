@@ -20,6 +20,7 @@ import Settings from './pages/settings';
 import Login from './pages/login';
 import Payment from './pages/payment';  
 import Employee from './pages/employee';
+import Customer from './pages/customer';
 import Layout from './components/layout';
 
 // ✅ ProtectedRoute updated to allow Supabase password recovery mode

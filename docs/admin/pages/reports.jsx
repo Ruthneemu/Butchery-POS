@@ -11,7 +11,7 @@ import 'react-datepicker/dist/react-datepicker.css';
 import { FiDownload, FiRefreshCw, FiClock, FiTrash2, FiMail } from 'react-icons/fi';
 import { BsGraphUp, BsBoxSeam, BsCurrencyDollar } from 'react-icons/bs';
 
-// Register all Chart.js components
+// Register Chart.js components
 Chart.register(
   ArcElement,
   Tooltip,
@@ -43,7 +43,6 @@ const Reports = () => {
   const [customerFilter, setCustomerFilter] = useState('');
   const [productFilter, setProductFilter] = useState('');
 
-  // Fetch all data on component mount
   useEffect(() => {
     fetchData();
   }, []);
@@ -65,11 +64,8 @@ const Reports = () => {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (!error) {
-      setInventory(data);
-    } else {
-      console.error('Failed to fetch inventory:', error.message);
-    }
+    if (!error) setInventory(data);
+    else console.error('Failed to fetch inventory:', error.message);
   };
 
   const fetchSales = async () => {
@@ -78,11 +74,8 @@ const Reports = () => {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (!error) {
-      setSales(data);
-    } else {
-      console.error('Failed to fetch sales:', error.message);
-    }
+    if (!error) setSales(data);
+    else console.error('Failed to fetch sales:', error.message);
   };
 
   const fetchCustomers = async () => {
@@ -90,9 +83,7 @@ const Reports = () => {
       .from('customers')
       .select('*');
 
-    if (!error) {
-      setCustomers(data);
-    }
+    if (!error) setCustomers(data);
   };
 
   const fetchScheduledReports = async () => {
@@ -100,15 +91,12 @@ const Reports = () => {
       .from('scheduled_reports')
       .select('*');
 
-    if (!error) {
-      setScheduledReports(data);
-    }
+    if (!error) setScheduledReports(data);
   };
 
-  // Export functions
   const exportToCSV = () => {
     let dataToExport = [];
-    const fileName = `${reportType}_report_${new Date().toISOString().slice(0, 10)}.csv`;
+    const fileName = `${reportType}_report_${new Date().toLocaleDateString().replace(/\//g, '-')}.csv`;
 
     if (reportType === 'inventory') {
       dataToExport = getFilteredInventory();
@@ -117,14 +105,11 @@ const Reports = () => {
     }
 
     if (dataToExport.length === 0) {
-      alert('No data to export');
+      alert('No data to export.');
       return;
     }
 
-    const csv = Papa.unparse(dataToExport, {
-      columns: true,
-    });
-
+    const csv = Papa.unparse(dataToExport, { columns: true });
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -136,7 +121,7 @@ const Reports = () => {
 
   const exportToPDF = () => {
     const doc = new jsPDF();
-    const fileName = `${reportType}_report_${new Date().toISOString().slice(0, 10)}.pdf`;
+    const fileName = `${reportType}_report_${new Date().toLocaleDateString().replace(/\//g, '-')}.pdf`;
     let tableColumn = [];
     let tableRows = [];
 
@@ -144,7 +129,7 @@ const Reports = () => {
     doc.text(`${reportType.charAt(0).toUpperCase() + reportType.slice(1)} Report`, 14, 22);
     doc.setFontSize(12);
     doc.setTextColor(100);
-    doc.text(`Date Range: ${startDate ? startDate.toLocaleDateString() : 'All time'} - ${endDate ? endDate.toLocaleDateString() : 'All time'}`, 14, 30);
+    doc.text(`Date Range: ${startDate.toLocaleDateString()} - ${endDate.toLocaleDateString()}`, 14, 30);
 
     if (reportType === 'inventory') {
       const filteredData = getFilteredInventory();
@@ -155,8 +140,8 @@ const Reports = () => {
         item.category || 'Uncategorized',
         item.quantity,
         item.unit,
-        `$${item.price.toFixed(2)}`,
-        `$${item.cost ? item.cost.toFixed(2) : 'N/A'}`,
+        `Ksh${item.price.toFixed(2)}`,
+        `Ksh${item.cost ? item.cost.toFixed(2) : 'N/A'}`,
         item.expiry_date ? new Date(item.expiry_date).toLocaleDateString() : 'N/A',
       ]);
     } else {
@@ -167,9 +152,9 @@ const Reports = () => {
         item.product_name,
         item.category || 'Uncategorized',
         item.quantity,
-        `$${item.unit_price.toFixed(2)}`,
-        `$${item.total_price.toFixed(2)}`,
-        `$${item.profit ? item.profit.toFixed(2) : 'N/A'}`,
+        `Ksh${item.unit_price.toFixed(2)}`,
+        `Ksh${item.total_price.toFixed(2)}`,
+        `Ksh${item.profit ? item.profit.toFixed(2) : 'N/A'}`,
         new Date(item.created_at).toLocaleDateString(),
         item.customer_name || 'Walk-in',
       ]);
@@ -181,26 +166,18 @@ const Reports = () => {
       startY: 35,
       styles: { fontSize: 9 },
       headStyles: { fillColor: [239, 68, 68] },
-      columnStyles: {
-        0: { cellWidth: 10 },
-        3: { cellWidth: 20 },
-        4: { cellWidth: 15 },
-        5: { cellWidth: 20 },
-        6: { cellWidth: 20 },
-      }
     });
 
-    // Add summary statistics
     if (reportType === 'sales') {
       const salesData = getFilteredSales();
       const totalSales = salesData.reduce((sum, sale) => sum + sale.total_price, 0);
       const totalProfit = salesData.reduce((sum, sale) => sum + (sale.profit || 0), 0);
-      
+
       autoTable(doc, {
         startY: doc.lastAutoTable.finalY + 10,
         body: [
-          ['Total Sales', `$${totalSales.toFixed(2)}`],
-          ['Total Profit', `$${totalProfit.toFixed(2)}`],
+          ['Total Sales', `Ksh${totalSales.toFixed(2)}`],
+          ['Total Profit', `Ksh${totalProfit.toFixed(2)}`],
           ['Profit Margin', `${totalSales ? ((totalProfit / totalSales) * 100).toFixed(2) + '%' : '0%'}`]
         ],
         styles: { fontSize: 10, cellPadding: 5 },
@@ -213,369 +190,240 @@ const Reports = () => {
 
     doc.save(fileName);
   };
-
-  // Filter functions
   const getFilteredInventory = () => {
-    let filtered = [...inventory];
-
-    if (startDate && endDate) {
-      filtered = filtered.filter((item) => {
-        if (!item.created_at) return false;
-        const createdAt = new Date(item.created_at);
-        return createdAt >= startDate && createdAt <= endDate;
-      });
-    }
-
-    if (categoryFilter) {
-      filtered = filtered.filter(item => item.category === categoryFilter);
-    }
-
-    if (lowStockFilter) {
-      filtered = filtered.filter(item => item.quantity < (item.low_stock_threshold || 5));
-    }
-
-    if (productFilter) {
-      filtered = filtered.filter(item => 
-        item.name.toLowerCase().includes(productFilter.toLowerCase())
-      );
-    }
-
-    return filtered;
+    return inventory.filter(item => {
+      const itemDate = new Date(item.created_at);
+      const inDateRange = itemDate >= startDate && itemDate <= endDate;
+      const inCategory = !categoryFilter || item.category === categoryFilter;
+      const isLowStock = !lowStockFilter || item.quantity < (item.low_stock_threshold || 5);
+      const matchesProduct = !productFilter || item.name?.toLowerCase().includes(productFilter.toLowerCase());
+      return inDateRange && inCategory && isLowStock && matchesProduct;
+    });
   };
 
   const getFilteredSales = () => {
-    let filtered = [...sales];
-
-    if (startDate && endDate) {
-      filtered = filtered.filter((item) => {
-        if (!item.created_at) return false;
-        const saleDate = new Date(item.created_at);
-        return saleDate >= startDate && saleDate <= endDate;
-      });
-    }
-
-    if (categoryFilter) {
-      filtered = filtered.filter(item => item.category === categoryFilter);
-    }
-
-    if (customerFilter) {
-      filtered = filtered.filter(item => 
-        item.customer_name && item.customer_name.toLowerCase().includes(customerFilter.toLowerCase())
-      );
-    }
-
-    if (productFilter) {
-      filtered = filtered.filter(item => 
-        item.product_name.toLowerCase().includes(productFilter.toLowerCase())
-      );
-    }
-
-    if (reportFrequency === 'daily') {
-      const dailySales = {};
-      filtered.forEach(sale => {
-        const date = new Date(sale.created_at).toLocaleDateString();
-        if (!dailySales[date]) {
-          dailySales[date] = { 
-            ...sale, 
-            product_name: date,
-            quantity: 0, 
-            total_price: 0,
-            profit: 0
-          };
-        }
-        dailySales[date].quantity += sale.quantity;
-        dailySales[date].total_price += sale.total_price;
-        dailySales[date].profit += (sale.profit || 0);
-      });
-      filtered = Object.values(dailySales);
-    } else if (reportFrequency === 'weekly') {
-      const weeklySales = {};
-      filtered.forEach(sale => {
-        const date = new Date(sale.created_at);
-        const week = `${date.getFullYear()}-W${Math.ceil(((date - new Date(date.getFullYear(), 0, 1)) / 86400000 + 1) / 7)}`;
-        if (!weeklySales[week]) {
-          weeklySales[week] = { 
-            ...sale, 
-            product_name: `Week ${week.split('-W')[1]}`,
-            quantity: 0, 
-            total_price: 0,
-            profit: 0
-          };
-        }
-        weeklySales[week].quantity += sale.quantity;
-        weeklySales[week].total_price += sale.total_price;
-        weeklySales[week].profit += (sale.profit || 0);
-      });
-      filtered = Object.values(weeklySales);
-    } else if (reportFrequency === 'monthly') {
-      const monthlySales = {};
-      filtered.forEach(sale => {
-        const date = new Date(sale.created_at);
-        const month = `${date.getFullYear()}-${date.getMonth() + 1}`;
-        if (!monthlySales[month]) {
-          monthlySales[month] = { 
-            ...sale, 
-            product_name: new Date(date.getFullYear(), date.getMonth()).toLocaleString('default', { month: 'long' }),
-            quantity: 0, 
-            total_price: 0,
-            profit: 0
-          };
-        }
-        monthlySales[month].quantity += sale.quantity;
-        monthlySales[month].total_price += sale.total_price;
-        monthlySales[month].profit += (sale.profit || 0);
-      });
-      filtered = Object.values(monthlySales);
-    }
-
-    return filtered;
+    return sales.filter(sale => {
+      const saleDate = new Date(sale.created_at);
+      const inDateRange = saleDate >= startDate && saleDate <= endDate;
+      const inCategory = !categoryFilter || sale.category === categoryFilter;
+      const matchesCustomer = !customerFilter || sale.customer_name?.toLowerCase().includes(customerFilter.toLowerCase());
+      const matchesProduct = !productFilter || sale.product_name?.toLowerCase().includes(productFilter.toLowerCase());
+      return inDateRange && inCategory && matchesCustomer && matchesProduct;
+    });
   };
 
-  // Chart data functions
+  const getUniqueCategories = () => {
+    const items = reportType === 'inventory' ? inventory : sales;
+    const categories = items.map(item => item.category).filter(Boolean);
+    return [...new Set(categories)];
+  };
+
+  const getSummaryStats = () => {
+    if (reportType === 'inventory') {
+      const filtered = getFilteredInventory();
+      const totalItems = filtered.length;
+      const lowStockCount = filtered.filter(item => item.quantity < (item.low_stock_threshold || 5)).length;
+      const expiringSoon = filtered.filter(item => {
+        if (!item.expiry_date) return false;
+        const expiry = new Date(item.expiry_date);
+        return expiry >= new Date() && expiry <= new Date(new Date().setDate(new Date().getDate() + 7));
+      }).length;
+
+      return [
+        { title: 'Total Items', value: totalItems, icon: <BsBoxSeam /> },
+        { title: 'Low Stock', value: lowStockCount, icon: <BsCurrencyDollar /> },
+        { title: 'Expiring Soon', value: expiringSoon, icon: <FiClock /> }
+      ];
+    } else {
+      const filtered = getFilteredSales();
+      const totalRevenue = filtered.reduce((sum, sale) => sum + sale.total_price, 0);
+      const totalProfit = filtered.reduce((sum, sale) => sum + (sale.profit || 0), 0);
+      const totalTransactions = filtered.length;
+
+      return [
+        { title: 'Total Revenue', value: `Ksh${totalRevenue.toFixed(2)}`, icon: <BsCurrencyDollar /> },
+        { title: 'Total Profit', value: `Ksh${totalProfit.toFixed(2)}`, icon: <BsGraphUp /> },
+        { title: 'Transactions', value: totalTransactions, icon: <FiRefreshCw /> }
+      ];
+    }
+  };
+
   const getInventoryPieData = () => {
-    const filtered = getFilteredInventory();
+    const data = getFilteredInventory();
+    const categoryCounts = {};
+
+    data.forEach(item => {
+      categoryCounts[item.category] = (categoryCounts[item.category] || 0) + 1;
+    });
+
     return {
-      labels: filtered.map((item) => item.name),
+      labels: Object.keys(categoryCounts),
       datasets: [
         {
-          label: 'Quantity',
-          data: filtered.map((item) => item.quantity),
-          backgroundColor: [
-            '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899',
-            '#6366f1', '#14b8a6', '#f43f5e', '#10b981', '#0ea5e9', '#64748b'
-          ],
-          hoverOffset: 30,
-        },
-      ],
+          label: 'Inventory Distribution',
+          data: Object.values(categoryCounts),
+          backgroundColor: ['#f87171', '#60a5fa', '#34d399', '#fbbf24', '#a78bfa']
+        }
+      ]
+    };
+  };
+
+  const getCategoryDistributionData = () => {
+    const data = reportType === 'inventory' ? getFilteredInventory() : getFilteredSales();
+    const categorySums = {};
+
+    data.forEach(item => {
+      const key = item.category || 'Uncategorized';
+      if (!categorySums[key]) categorySums[key] = 0;
+      categorySums[key] += reportType === 'inventory' ? item.quantity : item.total_price;
+    });
+
+    return {
+      labels: Object.keys(categorySums),
+      datasets: [
+        {
+          label: reportType === 'inventory' ? 'Quantity' : 'Total Sales',
+          data: Object.values(categorySums),
+          backgroundColor: ['#60a5fa', '#34d399', '#fbbf24', '#f87171', '#a78bfa']
+        }
+      ]
     };
   };
 
   const getSalesBarData = () => {
-    const filtered = getFilteredSales();
+    const data = getFilteredSales();
+    const freqMap = {};
+
+    data.forEach(sale => {
+      const date = new Date(sale.created_at);
+      let key;
+      if (reportFrequency === 'daily') key = date.toLocaleDateString();
+      else if (reportFrequency === 'weekly') {
+        const startOfWeek = new Date(date.setDate(date.getDate() - date.getDay()));
+        key = startOfWeek.toLocaleDateString();
+      } else if (reportFrequency === 'monthly') key = `${date.getMonth() + 1}/${date.getFullYear()}`;
+      else key = sale.product_name;
+
+      freqMap[key] = (freqMap[key] || 0) + sale.total_price;
+    });
+
     return {
-      labels: filtered.map((item) => item.product_name || `Sale ${filtered.indexOf(item) + 1}`),
+      labels: Object.keys(freqMap),
       datasets: [
         {
-          label: 'Total Sales ($)',
-          data: filtered.map((item) => item.total_price),
-          backgroundColor: '#3b82f6',
-        },
-        {
-          label: 'Quantity Sold',
-          data: filtered.map((item) => item.quantity),
-          backgroundColor: '#10b981',
-          yAxisID: 'y1'
-        },
-      ],
+          label: 'Sales',
+          data: Object.values(freqMap),
+          backgroundColor: '#f87171'
+        }
+      ]
     };
   };
 
   const getSalesTrendData = () => {
-    const filtered = getFilteredSales();
+    const data = getFilteredSales();
     const dailySales = {};
-    
-    filtered.forEach(sale => {
+
+    data.forEach(sale => {
       const date = new Date(sale.created_at).toLocaleDateString();
-      if (!dailySales[date]) {
-        dailySales[date] = 0;
-      }
-      dailySales[date] += sale.total_price;
+      dailySales[date] = (dailySales[date] || 0) + sale.total_price;
     });
 
     return {
       labels: Object.keys(dailySales),
       datasets: [
         {
-          label: 'Daily Sales ($)',
+          label: 'Total Sales',
           data: Object.values(dailySales),
-          borderColor: '#ef4444',
-          backgroundColor: 'rgba(239, 68, 68, 0.1)',
-          fill: true,
-          tension: 0.1,
-        },
-      ],
-    };
-  };
-
-  const getCategoryDistributionData = () => {
-    const filtered = reportType === 'inventory' ? getFilteredInventory() : getFilteredSales();
-    const categories = {};
-
-    filtered.forEach(item => {
-      const category = item.category || 'Uncategorized';
-      if (!categories[category]) {
-        categories[category] = {
-          quantity: 0,
-          sales: 0,
-          profit: 0
-        };
-      }
-      if (reportType === 'inventory') {
-        categories[category].quantity += item.quantity;
-      } else {
-        categories[category].sales += item.total_price;
-        categories[category].profit += (item.profit || 0);
-      }
-    });
-
-    return {
-      labels: Object.keys(categories),
-      datasets: [
-        {
-          label: reportType === 'inventory' ? 'Quantity by Category' : 'Sales by Category ($)',
-          data: Object.values(categories).map(item => reportType === 'inventory' ? item.quantity : item.sales),
-          backgroundColor: [
-            '#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#ec4899',
-            '#6366f1', '#14b8a6', '#f43f5e', '#10b981', '#0ea5e9', '#64748b'
-          ],
-        },
-      ],
+          borderColor: '#34d399',
+          fill: false,
+          tension: 0.3
+        }
+      ]
     };
   };
 
   const getProfitTrendData = () => {
-    const filtered = getFilteredSales();
+    const data = getFilteredSales();
     const dailyProfit = {};
-    
-    filtered.forEach(sale => {
+
+    data.forEach(sale => {
       const date = new Date(sale.created_at).toLocaleDateString();
-      if (!dailyProfit[date]) {
-        dailyProfit[date] = 0;
-      }
-      dailyProfit[date] += (sale.profit || 0);
+      dailyProfit[date] = (dailyProfit[date] || 0) + (sale.profit || 0);
     });
 
     return {
       labels: Object.keys(dailyProfit),
       datasets: [
         {
-          label: 'Daily Profit ($)',
+          label: 'Profit',
           data: Object.values(dailyProfit),
-          borderColor: '#10b981',
-          backgroundColor: 'rgba(16, 185, 129, 0.1)',
-          fill: true,
-          tension: 0.1,
-        },
-      ],
+          borderColor: '#f59e0b',
+          fill: false,
+          tension: 0.3
+        }
+      ]
     };
   };
 
   const getCustomerSpendingData = () => {
-    const filtered = getFilteredSales();
-    const customerSpending = {};
+    const data = getFilteredSales();
+    const spendingMap = {};
 
-    filtered.forEach(sale => {
-      const customer = sale.customer_name || 'Walk-in';
-      if (!customerSpending[customer]) {
-        customerSpending[customer] = 0;
-      }
-      customerSpending[customer] += sale.total_price;
+    data.forEach(sale => {
+      const name = sale.customer_name || 'Walk-in';
+      spendingMap[name] = (spendingMap[name] || 0) + sale.total_price;
     });
 
-    // Sort customers by spending and take top 10
-    const sortedCustomers = Object.entries(customerSpending)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 10);
+    const sorted = Object.entries(spendingMap).sort((a, b) => b[1] - a[1]).slice(0, 10);
+    const labels = sorted.map(entry => entry[0]);
+    const values = sorted.map(entry => entry[1]);
 
     return {
-      labels: sortedCustomers.map(item => item[0]),
+      labels,
       datasets: [
         {
-          label: 'Total Spending ($)',
-          data: sortedCustomers.map(item => item[1]),
-          backgroundColor: '#8b5cf6',
-        },
-      ],
+          label: 'Spending (Ksh)',
+          data: values,
+          backgroundColor: '#a78bfa'
+        }
+      ]
     };
   };
 
-  // Schedule report functions
   const scheduleReport = async () => {
-    if (!email) {
-      alert('Please enter an email address');
-      return;
-    }
+    if (!email) return alert('Please enter an email.');
 
-    const { error } = await supabase
-      .from('scheduled_reports')
-      .insert([
-        {
-          email,
-          report_type: reportType,
-          frequency: scheduleFrequency,
-          filters: {
-            start_date: startDate,
-            end_date: endDate,
-            category: categoryFilter,
-            low_stock: lowStockFilter,
-            customer: customerFilter,
-            product: productFilter
-          }
-        }
-      ]);
+    const filters = {
+      category: categoryFilter,
+      low_stock: lowStockFilter,
+      customer: customerFilter,
+      product: productFilter
+    };
+
+    const { error } = await supabase.from('scheduled_reports').insert([
+      {
+        email,
+        report_type: reportType,
+        frequency: scheduleFrequency,
+        filters
+      }
+    ]);
 
     if (error) {
-      alert('Failed to schedule report: ' + error.message);
+      console.error('Failed to schedule:', error.message);
+      alert('Failed to schedule report.');
     } else {
+      alert('Report scheduled successfully!');
       setEmail('');
       setShowScheduleForm(false);
       fetchScheduledReports();
-      alert('Report scheduled successfully!');
     }
   };
 
   const deleteScheduledReport = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this scheduled report?')) return;
-
-    const { error } = await supabase
-      .from('scheduled_reports')
-      .delete()
-      .eq('id', id);
-
-    if (!error) {
-      fetchScheduledReports();
-    }
+    const { error } = await supabase.from('scheduled_reports').delete().eq('id', id);
+    if (!error) fetchScheduledReports();
   };
-
-  // Get unique categories for filter dropdown
-  const getUniqueCategories = () => {
-    const data = reportType === 'inventory' ? inventory : sales;
-    const categories = new Set();
-    data.forEach(item => {
-      if (item.category) categories.add(item.category);
-    });
-    return Array.from(categories);
-  };
-
-  // Summary statistics
-  const getSummaryStats = () => {
-    if (reportType === 'inventory') {
-      const filtered = getFilteredInventory();
-      const totalItems = filtered.reduce((sum, item) => sum + item.quantity, 0);
-      const totalValue = filtered.reduce((sum, item) => sum + (item.quantity * item.price), 0);
-      const lowStockItems = filtered.filter(item => item.quantity < (item.low_stock_threshold || 5)).length;
-      
-      return [
-        { title: 'Total Items', value: totalItems, icon: <BsBoxSeam className="text-blue-500" /> },
-        { title: 'Total Value', value: `$${totalValue.toFixed(2)}`, icon: <BsCurrencyDollar className="text-green-500" /> },
-        { title: 'Low Stock Items', value: lowStockItems, icon: <BsGraphUp className="text-red-500" /> }
-      ];
-    } else {
-      const filtered = getFilteredSales();
-      const totalSales = filtered.reduce((sum, sale) => sum + sale.total_price, 0);
-      const totalProfit = filtered.reduce((sum, sale) => sum + (sale.profit || 0), 0);
-      const profitMargin = totalSales ? (totalProfit / totalSales) * 100 : 0;
-      const avgSaleValue = filtered.length ? totalSales / filtered.length : 0;
-      
-      return [
-        { title: 'Total Sales', value: `$${totalSales.toFixed(2)}`, icon: <BsCurrencyDollar className="text-blue-500" /> },
-        { title: 'Total Profit', value: `$${totalProfit.toFixed(2)}`, icon: <BsGraphUp className="text-green-500" /> },
-        { title: 'Profit Margin', value: `${profitMargin.toFixed(2)}%`, icon: <BsGraphUp className="text-purple-500" /> },
-        { title: 'Avg. Sale Value', value: `$${avgSaleValue.toFixed(2)}`, icon: <BsCurrencyDollar className="text-yellow-500" /> }
-      ];
-    }
-  };
-
   return (
     <Layout>
       <div className="p-6 bg-gray-50 min-h-screen">
@@ -592,6 +440,7 @@ const Reports = () => {
         {/* Report Controls */}
         <div className="bg-white p-4 rounded-lg shadow-md mb-6">
           <div className="flex flex-wrap gap-4 items-center mb-4">
+            {/* Report Type */}
             <div>
               <label className="block font-medium mb-1">Report Type</label>
               <select
@@ -604,6 +453,7 @@ const Reports = () => {
               </select>
             </div>
 
+            {/* Date Range */}
             <div>
               <label className="block font-medium mb-1">Date Range</label>
               <div className="flex gap-2">
@@ -626,6 +476,7 @@ const Reports = () => {
               </div>
             </div>
 
+            {/* Category Filter */}
             <div>
               <label className="block font-medium mb-1">Category</label>
               <select
@@ -640,6 +491,7 @@ const Reports = () => {
               </select>
             </div>
 
+            {/* Low Stock Only (Inventory Only) */}
             {reportType === 'inventory' && (
               <div className="flex items-center mt-6">
                 <input
@@ -653,6 +505,7 @@ const Reports = () => {
               </div>
             )}
 
+            {/* Frequency and Customer (Sales Only) */}
             {reportType === 'sales' && (
               <>
                 <div>
@@ -681,6 +534,7 @@ const Reports = () => {
               </>
             )}
 
+            {/* Product Filter */}
             <div>
               <label className="block font-medium mb-1">Product</label>
               <input
@@ -692,6 +546,7 @@ const Reports = () => {
               />
             </div>
 
+            {/* Reset Filters */}
             <button
               onClick={() => {
                 setStartDate(new Date(new Date().setDate(new Date().getDate() - 30)));
@@ -707,6 +562,7 @@ const Reports = () => {
             </button>
           </div>
 
+          {/* Export and Schedule Buttons */}
           <div className="flex flex-wrap gap-4 mt-4">
             <button
               onClick={exportToCSV}
@@ -728,6 +584,7 @@ const Reports = () => {
             </button>
           </div>
 
+          {/* Schedule Form */}
           {showScheduleForm && (
             <div className="mt-4 p-4 bg-gray-100 rounded-lg">
               <h3 className="font-semibold mb-2">Schedule This Report</h3>
@@ -783,7 +640,6 @@ const Reports = () => {
             ))}
           </div>
         )}
-
         {/* Scheduled Reports List */}
         {scheduledReports.length > 0 && (
           <div className="bg-white p-4 rounded-lg shadow-md mb-6">
@@ -827,14 +683,14 @@ const Reports = () => {
           </div>
         )}
 
-        {/* Report Content */}
+        {/* Main Content */}
         {loading ? (
           <div className="text-center py-8">
             <p>Loading data...</p>
           </div>
         ) : (
           <>
-            {/* Tabs for different views */}
+            {/* Tabs */}
             <div className="flex border-b mb-6">
               <button
                 className={`px-4 py-2 font-medium ${activeTab === 'overview' ? 'border-b-2 border-red-500 text-red-600' : 'text-gray-600'}`}
@@ -858,6 +714,7 @@ const Reports = () => {
               )}
             </div>
 
+            {/* Overview Tab */}
             {activeTab === 'overview' && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 {reportType === 'inventory' ? (
@@ -872,9 +729,7 @@ const Reports = () => {
                         data={getCategoryDistributionData()} 
                         options={{
                           scales: {
-                            y: {
-                              beginAtZero: true
-                            }
+                            y: { beginAtZero: true }
                           }
                         }}
                       />
@@ -888,16 +743,7 @@ const Reports = () => {
                         data={getSalesBarData()} 
                         options={{
                           scales: {
-                            y: {
-                              beginAtZero: true
-                            },
-                            y1: {
-                              beginAtZero: true,
-                              position: 'right',
-                              grid: {
-                                drawOnChartArea: false
-                              }
-                            }
+                            y: { beginAtZero: true }
                           }
                         }}
                       />
@@ -919,6 +765,7 @@ const Reports = () => {
               </div>
             )}
 
+            {/* Customer Insights */}
             {activeTab === 'customers' && reportType === 'sales' && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
                 <div className="bg-white p-4 rounded-lg shadow-md">
@@ -928,9 +775,7 @@ const Reports = () => {
                     options={{
                       indexAxis: 'y',
                       scales: {
-                        x: {
-                          beginAtZero: true
-                        }
+                        x: { beginAtZero: true }
                       }
                     }}
                   />
@@ -942,6 +787,7 @@ const Reports = () => {
               </div>
             )}
 
+            {/* Detailed Table */}
             {(activeTab === 'details' || activeTab === 'customers') && (
               <div className="bg-white p-4 rounded-lg shadow-md">
                 <h2 className="text-xl font-semibold mb-4">
