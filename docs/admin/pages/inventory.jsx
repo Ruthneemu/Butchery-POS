@@ -818,31 +818,6 @@ const Inventory = () => {
               <canvas ref={chartRef} height="300"></canvas>
             </div>
           )}
-
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="bg-gray-100 p-4 rounded">
-              <h3 className="font-semibold text-gray-600">Total Products</h3>
-              <p className="text-2xl font-bold">{products.length}</p>
-            </div>
-            <div className="bg-gray-100 p-4 rounded">
-              <h3 className="font-semibold text-gray-600">Low Stock</h3>
-              <p className="text-2xl font-bold text-red-600">
-                {products.filter(p => isLowStock(p.quantity)).length}
-              </p>
-            </div>
-            <div className="bg-gray-100 p-4 rounded">
-              <h3 className="font-semibold text-gray-600">Near Expiry</h3>
-              <p className="text-2xl font-bold text-yellow-600">
-                {products.filter(p => isNearExpiry(p.expiry_date)).length}
-              </p>
-            </div>
-            <div className="bg-gray-100 p-4 rounded">
-              <h3 className="font-semibold text-gray-600">Total Value</h3>
-              <p className="text-2xl font-bold">
-                KSh {products.reduce((sum, p) => sum + (p.price * p.quantity), 0).toLocaleString()}
-              </p>
-            </div>
-          </div>
         </div>
 
         {/* Search and Filter Controls */}
@@ -1474,7 +1449,6 @@ const Inventory = () => {
                   <th className="px-4 py-2 text-left text-sm">Selling Price</th>
                   <th className="px-4 py-2 text-left text-sm">Unit</th>
                   <th className="px-4 py-2 text-left text-sm">Variants</th>
-                  <th className="px-4 py-2 text-left text-sm">Barcode</th>
                   <th className="px-4 py-2 text-left text-sm">Actions</th>
                 </tr>
               </thead>
