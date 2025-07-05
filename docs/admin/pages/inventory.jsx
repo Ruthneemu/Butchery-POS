@@ -19,7 +19,6 @@ const Inventory = () => {
   const [newImage, setNewImage] = useState(null);
   const [newVariant, setNewVariant] = useState('');
   const [variants, setVariants] = useState([]);
-  const [category, setCategory] = useState('meat');
 
   // Bulk import states
   const [bulkData, setBulkData] = useState('');
@@ -36,7 +35,6 @@ const Inventory = () => {
   const [editImage, setEditImage] = useState(null);
   const [editVariant, setEditVariant] = useState('');
   const [editVariants, setEditVariants] = useState([]);
-  const [editCategory, setEditCategory] = useState('meat');
 
   // Stock Adjustment states
   const [showStockAdjustment, setShowStockAdjustment] = useState(false);
@@ -62,22 +60,12 @@ const Inventory = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [lowStockFilter, setLowStockFilter] = useState(false);
   const [nearExpiryFilter, setNearExpiryFilter] = useState(false);
-  const [categoryFilter, setCategoryFilter] = useState('all');
   const [stockTakeMode, setStockTakeMode] = useState(false);
   const [stockTakeCounts, setStockTakeCounts] = useState({});
   const [showInventoryChart, setShowInventoryChart] = useState(false);
   
   const chartRef = useRef();
   const chartInstance = useRef(null);
-
-  // Categories for butchery products
-  const categories = [
-    { value: 'meat', label: 'Meat' },
-    { value: 'poultry', label: 'Poultry' },
-    { value: 'seafood', label: 'Seafood' },
-    { value: 'processed', label: 'Processed' },
-    { value: 'other', label: 'Other' }
-  ];
 
   // Fetch products from Supabase
   const fetchProducts = async () => {
@@ -101,10 +89,6 @@ const Inventory = () => {
 
     if (searchTerm) {
       query = query.ilike('name', `%${searchTerm}%`);
-    }
-
-    if (categoryFilter !== 'all') {
-      query = query.eq('category', categoryFilter);
     }
 
     const { data, error } = await query;
@@ -149,7 +133,7 @@ const Inventory = () => {
         chartInstance.current.destroy();
       }
     };
-  }, [searchTerm, lowStockFilter, nearExpiryFilter, categoryFilter]);
+  }, [searchTerm, lowStockFilter, nearExpiryFilter]);
 
   // Initialize chart when showInventoryChart changes
   useEffect(() => {
@@ -209,8 +193,7 @@ const Inventory = () => {
             price: Number(newPrice),
             unit: newUnit,
             selling_price: Number(sellingPrice) || Number(newPrice) * 1.2,
-            variants: variants.length > 0 ? variants : null,
-            category: category
+            variants: variants.length > 0 ? variants : null
           },
         ])
         .select()
@@ -241,7 +224,6 @@ const Inventory = () => {
       setNewImage(null);
       setVariants([]);
       setNewVariant('');
-      setCategory('meat');
 
       fetchProducts();
     } catch (error) {
@@ -297,7 +279,6 @@ const Inventory = () => {
     setEditUnit(product.unit ?? 'kg');
     setEditSellingPrice(product.selling_price ?? '');
     setEditVariants(product.variants || []);
-    setEditCategory(product.category || 'meat');
   };
 
   // Cancel editing
@@ -311,7 +292,6 @@ const Inventory = () => {
     setEditVariants([]);
     setEditVariant('');
     setEditImage(null);
-    setEditCategory('meat');
   };
 
   // Save edited product
@@ -329,8 +309,7 @@ const Inventory = () => {
         price: Number(editPrice),
         unit: editUnit,
         selling_price: Number(editSellingPrice) || Number(editPrice) * 1.2,
-        variants: editVariants.length > 0 ? editVariants : null,
-        category: editCategory
+        variants: editVariants.length > 0 ? editVariants : null
       };
 
       // Upload new image if provided
@@ -364,7 +343,7 @@ const Inventory = () => {
       for (const line of lines) {
         if (!line.trim()) continue;
         
-        const [name, quantity, price, unit = 'kg', expiry = null, sellingPrice = null, category = 'meat'] = line.split(',');
+        const [name, quantity, price, unit = 'kg', expiry = null, sellingPrice = null] = line.split(',');
         
         productsToImport.push({
           name: name.trim(),
@@ -372,8 +351,7 @@ const Inventory = () => {
           price: Number(price.trim()),
           unit: unit.trim(),
           expiry_date: expiry?.trim() || null,
-          selling_price: sellingPrice ? Number(sellingPrice.trim()) : null,
-          category: category.trim() || 'meat'
+          selling_price: sellingPrice ? Number(sellingPrice.trim()) : null
         });
       }
       
@@ -453,30 +431,18 @@ const Inventory = () => {
     
     const ctx = chartRef.current.getContext('2d');
     
-    // Categorize products
-    const categoriesData = {};
-    categories.forEach(cat => {
-      categoriesData[cat.label] = products.filter(p => p.category === cat.value).length;
-    });
-    
     // Low stock products
     const lowStockCount = products.filter(p => isLowStock(p.quantity)).length;
     
     chartInstance.current = new Chart(ctx, {
       type: 'bar',
       data: {
-        labels: [...categories.map(c => c.label), 'Low Stock'],
+        labels: ['Low Stock'],
         datasets: [{
           label: 'Inventory Overview',
-          data: [...categories.map(c => categoriesData[c.label]), lowStockCount],
-          backgroundColor: [
-            ...categories.map((_, i) => `hsl(${i * 70}, 70%, 50%)`),
-            'rgba(255, 99, 132, 0.7)'
-          ],
-          borderColor: [
-            ...categories.map((_, i) => `hsl(${i * 70}, 70%, 30%)`),
-            'rgba(255, 99, 132, 1)'
-          ],
+          data: [lowStockCount],
+          backgroundColor: ['rgba(255, 99, 132, 0.7)'],
+          borderColor: ['rgba(255, 99, 132, 1)'],
           borderWidth: 1
         }]
       },
@@ -695,7 +661,7 @@ const Inventory = () => {
 
   // Prepare CSV data for export
   const csvData = [
-    ['Name', 'Quantity', 'Price', 'Unit', 'Expiry Date', 'Selling Price', 'Variants', 'Category'],
+    ['Name', 'Quantity', 'Price', 'Unit', 'Expiry Date', 'Selling Price', 'Variants'],
     ...products.map(product => [
       product.name,
       product.quantity,
@@ -703,8 +669,7 @@ const Inventory = () => {
       product.unit,
       product.expiry_date || '',
       product.selling_price || '',
-      product.variants ? product.variants.join(';') : '',
-      product.category || 'meat'
+      product.variants ? product.variants.join(';') : ''
     ])
   ];
 
@@ -750,16 +715,6 @@ const Inventory = () => {
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
-            <select
-              className="border border-gray-300 rounded px-3 py-2"
-              value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
-            >
-              <option value="all">All Categories</option>
-              {categories.map(cat => (
-                <option key={cat.value} value={cat.value}>{cat.label}</option>
-              ))}
-            </select>
             <button
               onClick={() => setLowStockFilter(!lowStockFilter)}
               className={`px-4 py-2 rounded ${lowStockFilter ? 'bg-red-600 text-white' : 'bg-gray-200'}`}
@@ -1047,13 +1002,13 @@ const Inventory = () => {
           <div className="mb-8 bg-white p-4 sm:p-6 rounded shadow-md">
             <h2 className="text-xl font-semibold mb-4">Bulk Import Products</h2>
             <p className="text-sm text-gray-600 mb-4">
-              Enter product data in CSV format (Name, Quantity, Price, Unit, Expiry Date, Selling Price, Category). One product per line.
+              Enter product data in CSV format (Name, Quantity, Price, Unit, Expiry Date, Selling Price). One product per line.
             </p>
             <textarea
               className="w-full border border-gray-300 rounded px-3 py-2 h-40 mb-4 font-mono text-sm"
               value={bulkData}
               onChange={(e) => setBulkData(e.target.value)}
-              placeholder="Example:&#10;Beef Ribeye,10,500,kg,2023-12-31,600,meat&#10;Chicken Breast,20,300,kg,,350,poultry"
+              placeholder="Example:&#10;Beef Ribeye,10,500,kg,2023-12-31,600&#10;Chicken Breast,20,300,kg,,350"
             />
             <div className="flex justify-end space-x-2">
               <button
@@ -1218,20 +1173,6 @@ const Inventory = () => {
             </div>
 
             <div>
-              <label className="block mb-1 font-medium">Category*</label>
-              <select
-                className="w-full border border-gray-300 rounded px-3 py-2"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                required
-              >
-                {categories.map(cat => (
-                  <option key={cat.value} value={cat.value}>{cat.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
               <label className="block mb-1 font-medium">Expiry Date</label>
               <input
                 type="date"
@@ -1309,7 +1250,6 @@ const Inventory = () => {
                   <th className="px-4 py-2 text-left text-sm">#</th>
                   <th className="px-4 py-2 text-left text-sm">Image</th>
                   <th className="px-4 py-2 text-left text-sm">Name</th>
-                  <th className="px-4 py-2 text-left text-sm">Category</th>
                   <th className="px-4 py-2 text-left text-sm">Quantity</th>
                   <th className="px-4 py-2 text-left text-sm">Expiry Date</th>
                   <th className="px-4 py-2 text-left text-sm">Price</th>
@@ -1354,18 +1294,6 @@ const Inventory = () => {
                             className="border border-gray-300 rounded px-2 py-1 w-full"
                             required
                           />
-                        </td>
-                        <td className="px-4 py-2">
-                          <select
-                            value={editCategory}
-                            onChange={(e) => setEditCategory(e.target.value)}
-                            className="border border-gray-300 rounded px-2 py-1 w-full"
-                            required
-                          >
-                            {categories.map(cat => (
-                              <option key={cat.value} value={cat.value}>{cat.label}</option>
-                            ))}
-                          </select>
                         </td>
                         <td className="px-4 py-2">
                           <input
@@ -1507,9 +1435,6 @@ const Inventory = () => {
                             Near Expiry
                           </span>
                         )}
-                      </td>
-                      <td className="px-4 py-2">
-                        {categories.find(c => c.value === product.category)?.label || product.category}
                       </td>
                       {stockTakeMode ? (
                         <td className="px-4 py-2">
