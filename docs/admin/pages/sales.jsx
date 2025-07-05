@@ -97,46 +97,61 @@ const Sales = () => {
 
   // ========== SALES FUNCTIONS ==========
   const handleAddSale = async () => {
-    if (!selectedItem || !quantity) return alert('Select item and quantity.');
+  if (!selectedItem || !quantity) return alert('Select item and quantity.');
 
-    const item = inventory.find(inv => inv.id === Number(selectedItem));
-    if (!item) return alert('Item not found.');
+  const item = inventory.find(inv => inv.id === Number(selectedItem));
+  if (!item) return alert('Item not found.');
 
-    const qty = parseInt(quantity, 10);
+  let qty;
+  const enteredValue = quantity.trim();
+
+  // Detect if entered is price-like e.g. "500" without units
+  if (enteredValue.includes('.') || Number(enteredValue) >= item.selling_price) {
+    // Calculate quantity from amount
+    const amount = parseFloat(enteredValue);
+    qty = Math.floor(amount / item.selling_price);
+
+    if (qty <= 0) return alert('Amount too low for selected item.');
+    if (item.quantity < qty) return alert('Not enough stock for requested amount.');
+  } else {
+    // Treat as normal quantity
+    qty = parseInt(enteredValue, 10);
     if (qty <= 0) return alert('Quantity must be greater than zero.');
     if (item.quantity < qty) return alert('Not enough stock!');
+  }
 
-    const total = item.selling_price * qty;
+  const total = item.selling_price * qty;
 
-    // Update inventory
-    const { error: updateError } = await supabase
+  // Update inventory
+  const { error: updateError } = await supabase
+    .from('inventory')
+    .update({ quantity: item.quantity - qty })
+    .eq('id', item.id);
+  if (updateError) return alert('Failed to update stock.');
+
+  // Record sale
+  const { error: insertError } = await supabase.from('sales').insert([{
+    item_id: item.id,
+    item_name: item.name,
+    quantity: qty,
+    price: item.selling_price,
+    total,
+    payment_method: 'cash'
+  }]);
+
+  if (insertError) {
+    alert('Failed to add sale.');
+    // Revert stock update
+    await supabase
       .from('inventory')
-      .update({ quantity: item.quantity - qty })
+      .update({ quantity: item.quantity })
       .eq('id', item.id);
-    if (updateError) return alert('Failed to update stock.');
+  } else {
+    setSelectedItem('');
+    setQuantity('');
+  }
+};
 
-    // Record sale
-    const { error: insertError } = await supabase.from('sales').insert([{
-      item_id: item.id,
-      item_name: item.name,
-      quantity: qty,
-      price: item.selling_price,
-      total,
-      payment_method: 'cash'
-    }]);
-
-    if (insertError) {
-      alert('Failed to add sale.');
-      // Revert stock update
-      await supabase
-        .from('inventory')
-        .update({ quantity: item.quantity })
-        .eq('id', item.id);
-    } else {
-      setSelectedItem('');
-      setQuantity('');
-    }
-  };
 
   const startEditSale = (sale) => {
     setEditingSaleId(sale.id);

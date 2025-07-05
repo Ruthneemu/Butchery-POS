@@ -19,7 +19,6 @@ const Inventory = () => {
   const [newImage, setNewImage] = useState(null);
   const [newVariant, setNewVariant] = useState('');
   const [variants, setVariants] = useState([]);
-  const [barcode, setBarcode] = useState('');
   const [category, setCategory] = useState('meat');
 
   // Bulk import states
@@ -37,7 +36,6 @@ const Inventory = () => {
   const [editImage, setEditImage] = useState(null);
   const [editVariant, setEditVariant] = useState('');
   const [editVariants, setEditVariants] = useState([]);
-  const [editBarcode, setEditBarcode] = useState('');
   const [editCategory, setEditCategory] = useState('meat');
 
   // Stock Adjustment states
@@ -65,14 +63,10 @@ const Inventory = () => {
   const [lowStockFilter, setLowStockFilter] = useState(false);
   const [nearExpiryFilter, setNearExpiryFilter] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [showScanner, setShowScanner] = useState(false);
-  const [scannedBarcode, setScannedBarcode] = useState('');
   const [stockTakeMode, setStockTakeMode] = useState(false);
   const [stockTakeCounts, setStockTakeCounts] = useState({});
   const [showInventoryChart, setShowInventoryChart] = useState(false);
   
-  const videoRef = useRef();
-  const canvasRef = useRef();
   const chartRef = useRef();
   const chartInstance = useRef(null);
 
@@ -157,19 +151,6 @@ const Inventory = () => {
     };
   }, [searchTerm, lowStockFilter, nearExpiryFilter, categoryFilter]);
 
-  // Initialize barcode scanner
-  useEffect(() => {
-    if (showScanner) {
-      startBarcodeScanner();
-    } else {
-      stopBarcodeScanner();
-    }
-
-    return () => {
-      stopBarcodeScanner();
-    };
-  }, [showScanner]);
-
   // Initialize chart when showInventoryChart changes
   useEffect(() => {
     if (showInventoryChart && products.length > 0) {
@@ -229,7 +210,6 @@ const Inventory = () => {
             unit: newUnit,
             selling_price: Number(sellingPrice) || Number(newPrice) * 1.2,
             variants: variants.length > 0 ? variants : null,
-            barcode: barcode || null,
             category: category
           },
         ])
@@ -261,7 +241,6 @@ const Inventory = () => {
       setNewImage(null);
       setVariants([]);
       setNewVariant('');
-      setBarcode('');
       setCategory('meat');
 
       fetchProducts();
@@ -318,7 +297,6 @@ const Inventory = () => {
     setEditUnit(product.unit ?? 'kg');
     setEditSellingPrice(product.selling_price ?? '');
     setEditVariants(product.variants || []);
-    setEditBarcode(product.barcode || '');
     setEditCategory(product.category || 'meat');
   };
 
@@ -332,7 +310,6 @@ const Inventory = () => {
     setEditSellingPrice('');
     setEditVariants([]);
     setEditVariant('');
-    setEditBarcode('');
     setEditImage(null);
     setEditCategory('meat');
   };
@@ -353,7 +330,6 @@ const Inventory = () => {
         unit: editUnit,
         selling_price: Number(editSellingPrice) || Number(editPrice) * 1.2,
         variants: editVariants.length > 0 ? editVariants : null,
-        barcode: editBarcode || null,
         category: editCategory
       };
 
@@ -388,7 +364,7 @@ const Inventory = () => {
       for (const line of lines) {
         if (!line.trim()) continue;
         
-        const [name, quantity, price, unit = 'kg', expiry = null, sellingPrice = null, barcode = null, category = 'meat'] = line.split(',');
+        const [name, quantity, price, unit = 'kg', expiry = null, sellingPrice = null, category = 'meat'] = line.split(',');
         
         productsToImport.push({
           name: name.trim(),
@@ -397,7 +373,6 @@ const Inventory = () => {
           unit: unit.trim(),
           expiry_date: expiry?.trim() || null,
           selling_price: sellingPrice ? Number(sellingPrice.trim()) : null,
-          barcode: barcode?.trim() || null,
           category: category.trim() || 'meat'
         });
       }
@@ -416,60 +391,6 @@ const Inventory = () => {
       setError('Bulk import failed: ' + error.message);
     }
   };
-
-  // Start barcode scanner
-  const startBarcodeScanner = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { facingMode: 'environment' } 
-      });
-      videoRef.current.srcObject = stream;
-      
-      // Simple barcode detection (in a real app, you'd use a library like QuaggaJS)
-      const detectBarcode = () => {
-        if (!videoRef.current || !canvasRef.current) return;
-        
-        const canvas = canvasRef.current;
-        const context = canvas.getContext('2d');
-        canvas.width = videoRef.current.videoWidth;
-        canvas.height = videoRef.current.videoHeight;
-        context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-        
-        // In a real implementation, you would process the image here
-        // For demo purposes, we'll just simulate detection
-        setTimeout(() => {
-          setScannedBarcode('123456789'); // Simulated barcode
-          setShowScanner(false);
-        }, 2000);
-      };
-      
-      const interval = setInterval(detectBarcode, 3000);
-      return () => clearInterval(interval);
-    } catch (err) {
-      console.error('Error accessing camera:', err);
-      setError('Could not access camera. Please ensure you have granted permission.');
-    }
-  };
-
-  // Stop barcode scanner
-  const stopBarcodeScanner = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      videoRef.current.srcObject.getTracks().forEach(track => track.stop());
-    }
-  };
-
-  // Handle scanned barcode
-  useEffect(() => {
-    if (scannedBarcode) {
-      const product = products.find(p => p.barcode === scannedBarcode);
-      if (product) {
-        startEditing(product);
-      } else {
-        setBarcode(scannedBarcode);
-      }
-      setScannedBarcode('');
-    }
-  }, [scannedBarcode, products]);
 
   // Stock take functions
   const startStockTake = () => {
@@ -774,7 +695,7 @@ const Inventory = () => {
 
   // Prepare CSV data for export
   const csvData = [
-    ['Name', 'Quantity', 'Price', 'Unit', 'Expiry Date', 'Selling Price', 'Barcode', 'Variants', 'Category'],
+    ['Name', 'Quantity', 'Price', 'Unit', 'Expiry Date', 'Selling Price', 'Variants', 'Category'],
     ...products.map(product => [
       product.name,
       product.quantity,
@@ -782,7 +703,6 @@ const Inventory = () => {
       product.unit,
       product.expiry_date || '',
       product.selling_price || '',
-      product.barcode || '',
       product.variants ? product.variants.join(';') : '',
       product.category || 'meat'
     ])
@@ -881,12 +801,6 @@ const Inventory = () => {
                 >
                   Stock Count
                 </button>
-                <button
-                  onClick={() => setShowScanner(!showScanner)}
-                  className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded"
-                >
-                  {showScanner ? 'Stop Scanner' : 'Scan Barcode'}
-                </button>
               </>
             ) : (
               <>
@@ -906,33 +820,6 @@ const Inventory = () => {
             )}
           </div>
         </div>
-
-        {/* Barcode Scanner */}
-        {showScanner && (
-          <div className="mb-6 bg-white p-4 rounded shadow-md">
-            <h2 className="text-xl font-semibold mb-2">Barcode Scanner</h2>
-            <div className="relative">
-              <video 
-                ref={videoRef} 
-                autoPlay 
-                playsInline 
-                className="w-full h-64 bg-black rounded"
-              />
-              <canvas ref={canvasRef} className="hidden" />
-              <div className="absolute inset-0 flex items-center justify-center">
-                <div className="border-4 border-red-500 w-64 h-32 rounded-lg"></div>
-              </div>
-            </div>
-            <div className="mt-4">
-              <button
-                onClick={() => setShowScanner(false)}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded"
-              >
-                Close Scanner
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Stock Adjustment Modal */}
         {showStockAdjustment && (
@@ -1160,13 +1047,13 @@ const Inventory = () => {
           <div className="mb-8 bg-white p-4 sm:p-6 rounded shadow-md">
             <h2 className="text-xl font-semibold mb-4">Bulk Import Products</h2>
             <p className="text-sm text-gray-600 mb-4">
-              Enter product data in CSV format (Name, Quantity, Price, Unit, Expiry Date, Selling Price, Barcode, Category). One product per line.
+              Enter product data in CSV format (Name, Quantity, Price, Unit, Expiry Date, Selling Price, Category). One product per line.
             </p>
             <textarea
               className="w-full border border-gray-300 rounded px-3 py-2 h-40 mb-4 font-mono text-sm"
               value={bulkData}
               onChange={(e) => setBulkData(e.target.value)}
-              placeholder="Example:&#10;Beef Ribeye,10,500,kg,2023-12-31,600,123456789,meat&#10;Chicken Breast,20,300,kg,,350,987654321,poultry"
+              placeholder="Example:&#10;Beef Ribeye,10,500,kg,2023-12-31,600,meat&#10;Chicken Breast,20,300,kg,,350,poultry"
             />
             <div className="flex justify-end space-x-2">
               <button
@@ -1342,26 +1229,6 @@ const Inventory = () => {
                   <option key={cat.value} value={cat.value}>{cat.label}</option>
                 ))}
               </select>
-            </div>
-
-            <div>
-              <label className="block mb-1 font-medium">Barcode</label>
-              <div className="flex">
-                <input
-                  type="text"
-                  className="flex-1 border border-gray-300 rounded-l px-3 py-2"
-                  value={barcode}
-                  onChange={(e) => setBarcode(e.target.value)}
-                  placeholder="e.g., 123456789"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowScanner(true)}
-                  className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded-r"
-                >
-                  Scan
-                </button>
-              </div>
             </div>
 
             <div>
@@ -1679,7 +1546,6 @@ const Inventory = () => {
                           </div>
                         ) : 'N/A'}
                       </td>
-                      <td className="px-4 py-2 text-sm">{product.barcode || 'N/A'}</td>
                       <td className="px-4 py-2 space-x-2">
                         {!stockTakeMode && (
                           <>
