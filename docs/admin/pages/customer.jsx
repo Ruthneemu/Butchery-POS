@@ -25,7 +25,9 @@ export default function CustomersAndSuppliers() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 5;
 
-  // Load data
+  // Breadcrumb
+  const [showBreadcrumb, setShowBreadcrumb] = useState(true);
+
   useEffect(() => {
     fetchCustomers();
     fetchSuppliers();
@@ -43,7 +45,6 @@ export default function CustomersAndSuppliers() {
 
   const notify = (msg, type = 'success') => toast[type](msg);
 
-  // Add handler
   const handleAdd = async (type) => {
     const form = type === 'customer' ? customerForm : supplierForm;
     if (!form.name || !form.phone) return notify('Name and phone are required.', 'error');
@@ -73,7 +74,6 @@ export default function CustomersAndSuppliers() {
     notify(`${type === 'customers' ? 'Customer' : 'Supplier'} updated.`);
   };
 
-  // Filter & paginate based on tab
   const entries = activeTab === 'customers' ? customers : suppliers;
   const filtered = entries.filter(e =>
     e.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -85,7 +85,30 @@ export default function CustomersAndSuppliers() {
   return (
     <div className="p-6 max-w-7xl mx-auto">
       <ToastContainer position="top-right" autoClose={3000} />
-      <h1 className="text-2xl font-bold mb-6">👥 Customers & Suppliers</h1>
+
+      <h1 className="text-2xl font-bold mb-2">👥 Customers & Suppliers</h1>
+
+      {/* Breadcrumb with close button */}
+      {showBreadcrumb && (
+        <div className="flex justify-between items-center text-sm text-gray-600 bg-gray-100 px-4 py-2 rounded mb-6" aria-label="Breadcrumb">
+          <nav>
+            <ol className="list-reset flex items-center space-x-2">
+              <li>
+                <a href="/" className="text-blue-600 hover:underline">Dashboard</a>
+              </li>
+              <li>/</li>
+              <li className="text-gray-700">Customers & Suppliers</li>
+            </ol>
+          </nav>
+          <button
+            onClick={() => setShowBreadcrumb(false)}
+            className="text-gray-500 hover:text-red-600 text-xl font-bold leading-none ml-4"
+            aria-label="Close breadcrumb"
+          >
+            &times;
+          </button>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex space-x-4 mb-6">
@@ -171,52 +194,52 @@ export default function CustomersAndSuppliers() {
                 <>
                   <td className="border p-2">
                     {editCustomerId === entry.id
-                      ? <input value={editCustomerData.name} onChange={e => setEditCustomerData({ ...editCustomerData, name: e.target.value })}/>
+                      ? <input value={editCustomerData.name} onChange={e => setEditCustomerData({ ...editCustomerData, name: e.target.value })} />
                       : entry.name}
                   </td>
                   <td className="border p-2">
                     {editCustomerId === entry.id
-                      ? <input value={editCustomerData.phone} onChange={e => setEditCustomerData({ ...editCustomerData, phone: e.target.value })}/>
+                      ? <input value={editCustomerData.phone} onChange={e => setEditCustomerData({ ...editCustomerData, phone: e.target.value })} />
                       : entry.phone}
                   </td>
                   <td className="border p-2">
                     {editCustomerId === entry.id
-                      ? <input value={editCustomerData.email} onChange={e => setEditCustomerData({ ...editCustomerData, email: e.target.value })}/>
+                      ? <input value={editCustomerData.email} onChange={e => setEditCustomerData({ ...editCustomerData, email: e.target.value })} />
                       : entry.email || '-'}
                   </td>
                   <td className="border p-2">
                     {editCustomerId === entry.id
                       ? <button onClick={() => handleEdit('customers', entry.id)} className="text-green-600">Save</button>
                       : <>
-                        <button onClick={() => { setEditCustomerId(entry.id); setEditCustomerData(entry); }} className="text-blue-600 mr-2">Edit</button>
-                        <button onClick={() => handleDelete(entry.id, 'customers')} className="text-red-600">Delete</button>
-                      </>}
+                          <button onClick={() => { setEditCustomerId(entry.id); setEditCustomerData(entry); }} className="text-blue-600 mr-2">Edit</button>
+                          <button onClick={() => handleDelete(entry.id, 'customers')} className="text-red-600">Delete</button>
+                        </>}
                   </td>
                 </>
               ) : (
                 <>
                   <td className="border p-2">
                     {editSupplierId === entry.id
-                      ? <input value={editSupplierData.name} onChange={e => setEditSupplierData({ ...editSupplierData, name: e.target.value })}/>
+                      ? <input value={editSupplierData.name} onChange={e => setEditSupplierData({ ...editSupplierData, name: e.target.value })} />
                       : entry.name}
                   </td>
                   <td className="border p-2">
                     {editSupplierId === entry.id
-                      ? <input value={editSupplierData.phone} onChange={e => setEditSupplierData({ ...editSupplierData, phone: e.target.value })}/>
+                      ? <input value={editSupplierData.phone} onChange={e => setEditSupplierData({ ...editSupplierData, phone: e.target.value })} />
                       : entry.phone}
                   </td>
                   <td className="border p-2">
                     {editSupplierId === entry.id
-                      ? <input value={editSupplierData.email} onChange={e => setEditSupplierData({ ...editSupplierData, email: e.target.value })}/>
+                      ? <input value={editSupplierData.email} onChange={e => setEditSupplierData({ ...editSupplierData, email: e.target.value })} />
                       : entry.email || '-'}
                   </td>
                   <td className="border p-2">
                     {editSupplierId === entry.id
                       ? <button onClick={() => handleEdit('suppliers', entry.id)} className="text-green-600">Save</button>
                       : <>
-                        <button onClick={() => { setEditSupplierId(entry.id); setEditSupplierData(entry); }} className="text-blue-600 mr-2">Edit</button>
-                        <button onClick={() => handleDelete(entry.id, 'suppliers')} className="text-red-600">Delete</button>
-                      </>}
+                          <button onClick={() => { setEditSupplierId(entry.id); setEditSupplierData(entry); }} className="text-blue-600 mr-2">Edit</button>
+                          <button onClick={() => handleDelete(entry.id, 'suppliers')} className="text-red-600">Delete</button>
+                        </>}
                   </td>
                 </>
               )}
