@@ -88,8 +88,7 @@ export default function CustomersAndSuppliers() {
 
       <h1 className="text-2xl font-bold mb-2">👥 Customers & Suppliers</h1>
 
-      {/* Breadcrumb with close button */}
-      {showBreadcrumb && (
+      {/* Breadcrumb  */}
         <div className="flex justify-between items-center text-sm text-gray-600 bg-gray-100 px-4 py-2 rounded mb-6" aria-label="Breadcrumb">
           <nav>
             <ol className="list-reset flex items-center space-x-2">
@@ -102,7 +101,7 @@ export default function CustomersAndSuppliers() {
           </nav>
         
         </div>
-      )}
+      
 
       {/* Tabs */}
       <div className="flex space-x-4 mb-6">
