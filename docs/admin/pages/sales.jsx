@@ -131,27 +131,25 @@ const Sales = () => {
 
   // Record sale
   const { error: insertError } = await supabase.from('sales').insert([{
-    item_id: item.id,
-    item_name: item.name,
-    quantity: qty,
-    price: item.selling_price,
-    total,
-    payment_method: 'cash'
-  }]);
+  item_id: item.id,
+  item_name: item.name,
+  quantity: qty,
+  price: item.selling_price,
+  total,
+  payment_method: 'cash'
+}]);
 
-  if (insertError) {
-    alert('Failed to add sale.');
-    // Revert stock update
-    await supabase
-      .from('inventory')
-      .update({ quantity: item.quantity })
-      .eq('id', item.id);
-  } else {
-    setSelectedItem('');
-    setQuantity('');
-  }
-};
+if (insertError) {
+  console.error("Supabase insert error:", insertError);
+  alert('Failed to add sale: ' + insertError.message);
 
+  // Revert stock update
+  await supabase
+    .from('inventory')
+    .update({ quantity: item.quantity })
+    .eq('id', item.id);
+}
+  };
 
   const startEditSale = (sale) => {
     setEditingSaleId(sale.id);
