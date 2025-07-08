@@ -16,7 +16,7 @@ const Sales = () => {
 
   // Sales form state
   const [selectedItem, setSelectedItem] = useState('');
-  const [inputValue, setInputValue] = useState('');
+const [quantity, setQuantity] = useState('');
 
   // Order form state
   const [customerName, setCustomerName] = useState('');
@@ -100,31 +100,29 @@ const Sales = () => {
 
   // ========== SALES FUNCTIONS ==========
  const handleAddSale = async () => {
-  if (!selectedItem || !inputValue.trim() || !paymentMethod) {
-    return alert('Please select an item, enter quantity or amount, and choose a payment method.');
+  if (!selectedItem || !paymentMethod) {
+    return alert('Please select an item and payment method.');
+  }
+
+  if (!quantity && !amountPaid) {
+    return alert('Enter either quantity or amount paid.');
   }
 
   const item = inventory.find(inv => inv.id === Number(selectedItem));
   if (!item) return alert('Item not found.');
 
-  const entered = inputValue.trim();
-  const enteredNumber = parseFloat(entered);
-  if (isNaN(enteredNumber) || enteredNumber <= 0) {
-    return alert('Please enter a valid number.');
-  }
-
   let qty = 0;
 
-  if (entered.includes('.') || enteredNumber < item.selling_price) {
-    // User likely entered amount
-    const approxQty = enteredNumber / item.selling_price;
-    qty = Math.round(approxQty); // To nearest 1kg
+  if (amountPaid) {
+    const amount = parseFloat(amountPaid);
+    if (isNaN(amount) || amount <= 0) return alert('Enter a valid amount.');
+    qty = Math.floor(amount / item.selling_price);
     if (qty < 1) return alert('Amount too low to sell at least 1kg.');
-    if (item.quantity < qty) return alert('Not enough stock for requested amount.');
-  } else {
-    // User likely entered quantity
-    qty = Math.round(enteredNumber);
-    if (item.quantity < qty) return alert('Not enough stock!');
+    if (item.quantity < qty) return alert('Not enough stock for the amount entered.');
+  } else if (quantity) {
+    qty = parseInt(quantity, 10);
+    if (isNaN(qty) || qty <= 0) return alert('Enter a valid quantity.');
+    if (item.quantity < qty) return alert('Not enough stock.');
   }
 
   const total = item.selling_price * qty;
@@ -152,16 +150,19 @@ const Sales = () => {
     console.error("Supabase insert error:", insertError);
     alert('Failed to add sale: ' + insertError.message);
 
+    // Revert stock update
     await supabase
       .from('inventory')
       .update({ quantity: item.quantity })
       .eq('id', item.id);
   } else {
     setSelectedItem('');
-    setInputValue('');
+    setQuantity('');
+    setAmountPaid('');
     setPaymentMethod('');
   }
 };
+
   // ========== ORDER FUNCTIONS ==========
   const addItemToOrder = () => {
     if (!currentOrderItem) return alert('Select an item');
