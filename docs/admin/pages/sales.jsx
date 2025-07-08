@@ -11,6 +11,8 @@ const Sales = () => {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
+
+
   // Sales form state
   const [selectedItem, setSelectedItem] = useState('');
   const [quantity, setQuantity] = useState('');
@@ -97,28 +99,16 @@ const Sales = () => {
 
   // ========== SALES FUNCTIONS ==========
   const handleAddSale = async () => {
-  if (!selectedItem || !quantity) return alert('Select item and quantity.');
+  if (!selectedItem || !quantity || !paymentMethod) {
+    return alert('Please select an item, enter quantity, and choose a payment method.');
+  }
 
   const item = inventory.find(inv => inv.id === Number(selectedItem));
   if (!item) return alert('Item not found.');
 
-  let qty;
-  const enteredValue = quantity.trim();
-
-  // Detect if entered is price-like e.g. "500" without units
-  if (enteredValue.includes('.') || Number(enteredValue) >= item.selling_price) {
-    // Calculate quantity from amount
-    const amount = parseFloat(enteredValue);
-    qty = Math.floor(amount / item.selling_price);
-
-    if (qty <= 0) return alert('Amount too low for selected item.');
-    if (item.quantity < qty) return alert('Not enough stock for requested amount.');
-  } else {
-    // Treat as normal quantity
-    qty = parseInt(enteredValue, 10);
-    if (qty <= 0) return alert('Quantity must be greater than zero.');
-    if (item.quantity < qty) return alert('Not enough stock!');
-  }
+  const qty = parseInt(quantity, 10);
+  if (isNaN(qty) || qty <= 0) return alert('Quantity must be a valid number greater than zero.');
+  if (item.quantity < qty) return alert('Not enough stock!');
 
   const total = item.selling_price * qty;
 
@@ -127,100 +117,39 @@ const Sales = () => {
     .from('inventory')
     .update({ quantity: item.quantity - qty })
     .eq('id', item.id);
-  if (updateError) return alert('Failed to update stock.');
+
+  if (updateError) {
+    console.error("Inventory update error:", updateError);
+    return alert('Failed to update stock.');
+  }
 
   // Record sale
   const { error: insertError } = await supabase.from('sales').insert([{
-  item_id: item.id,
-  item_name: item.name,
-  quantity: qty,
-  price: item.selling_price,
-  total,
-  payment_method: 'cash'
-}]);
+    item_id: item.id,
+    item_name: item.name,
+    quantity: qty,
+    price: item.selling_price,
+    total,
+    payment_method: paymentMethod
+  }]);
 
-if (insertError) {
-  console.error("Supabase insert error:", insertError);
-  alert('Failed to add sale: ' + insertError.message);
+  if (insertError) {
+    console.error("Supabase insert error:", insertError);
+    alert('Failed to add sale: ' + insertError.message);
 
-  // Revert stock update
-  await supabase
-    .from('inventory')
-    .update({ quantity: item.quantity })
-    .eq('id', item.id);
-}
-  };
-
-  const startEditSale = (sale) => {
-    setEditingSaleId(sale.id);
-    setEditQuantity(sale.quantity);
-  };
-
-  const cancelEditSale = () => {
-    setEditingSaleId(null);
-    setEditQuantity('');
-  };
-
-  const saveEditSale = async (sale) => {
-    const newQty = parseInt(editQuantity, 10);
-    if (newQty <= 0) return alert('Quantity must be greater than zero.');
-
-    const item = inventory.find(inv => inv.id === sale.item_id);
-    if (!item) return alert('Item not found.');
-
-    const qtyDiff = newQty - sale.quantity;
-
-    if (qtyDiff > 0 && item.quantity < qtyDiff) {
-      return alert('Not enough stock to increase quantity.');
-    }
-
-    // Update inventory
-    const { error: updateInvError } = await supabase
+    // Revert stock update
+    await supabase
       .from('inventory')
-      .update({ quantity: item.quantity - qtyDiff })
+      .update({ quantity: item.quantity })
       .eq('id', item.id);
-    if (updateInvError) return alert('Failed to update stock.');
+  } else {
+    // Clear inputs after success
+    setSelectedItem('');
+    setQuantity('');
+    setPaymentMethod('');
+  }
+};
 
-    // Update sale
-    const newTotal = sale.price * newQty;
-    const { error: updateSaleError } = await supabase
-      .from('sales')
-      .update({ quantity: newQty, total: newTotal })
-      .eq('id', sale.id);
-    if (updateSaleError) {
-      await supabase
-        .from('inventory')
-        .update({ quantity: item.quantity })
-        .eq('id', item.id);
-      return alert('Failed to update sale.');
-    }
-
-    cancelEditSale();
-  };
-
-  const deleteSale = async (sale) => {
-    if (!window.confirm('Are you sure you want to delete this sale?')) return;
-
-    const item = inventory.find(inv => inv.id === sale.item_id);
-    if (!item) return alert('Item not found.');
-
-    // Restore stock
-    const { error: updateInvError } = await supabase
-      .from('inventory')
-      .update({ quantity: item.quantity + sale.quantity })
-      .eq('id', item.id);
-    if (updateInvError) return alert('Failed to restore stock.');
-
-    // Delete sale
-    const { error: deleteError } = await supabase.from('sales').delete().eq('id', sale.id);
-    if (deleteError) {
-      await supabase
-        .from('inventory')
-        .update({ quantity: item.quantity })
-        .eq('id', item.id);
-      return alert('Failed to delete sale.');
-    }
-  };
 
   // ========== ORDER FUNCTIONS ==========
   const addItemToOrder = () => {
@@ -469,33 +398,52 @@ if (insertError) {
 
             {/* Quick Sale Form */}
             <div className="flex flex-col sm:flex-row gap-4 mb-6 p-4 bg-gray-50 rounded">
-              <select
-                className="flex-grow px-4 py-2 border rounded"
-                value={selectedItem}
-                onChange={(e) => setSelectedItem(e.target.value)}
-              >
-                <option value="">Select Item</option>
-                {inventory.map(item => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} - KSh {item.selling_price} ({item.quantity} in stock)
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                placeholder="Quantity"
-                className="w-24 px-4 py-2 border rounded"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                min="1"
-              />
-              <button
-                className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700"
-                onClick={handleAddSale}
-              >
-                Record Sale
-              </button>
-            </div>
+  {/* Item Selector */}
+  <select
+    className="flex-grow px-4 py-2 border rounded"
+    value={selectedItem}
+    onChange={(e) => setSelectedItem(e.target.value)}
+  >
+    <option value="">Select Item</option>
+    {inventory.map(item => (
+      <option key={item.id} value={item.id}>
+        {item.name} - {item.quantity} in stock
+      </option>
+    ))}
+  </select>
+
+  {/* Quantity Input */}
+  <input
+    type="number"
+    placeholder="Quantity"
+    className="w-32 px-4 py-2 border rounded"
+    value={quantity}
+    onChange={(e) => setQuantity(e.target.value)}
+    min="1"
+  />
+
+  {/* Payment Method Selector */}
+  <select
+    value={paymentMethod}
+    onChange={(e) => setPaymentMethod(e.target.value)}
+    className="w-40 px-4 py-2 border rounded"
+    required
+  >
+    <option value="">Payment Method</option>
+    <option value="cash">Cash</option>
+    <option value="mpesa">M-Pesa</option>
+    <option value="bank">Bank</option>
+  </select>
+
+  {/* Record Sale Button */}
+  <button
+    className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 w-full sm:w-auto"
+    onClick={handleAddSale}
+  >
+    Record Sale
+  </button>
+</div>
+
 
             {/* Sales Table */}
             {loading ? (
