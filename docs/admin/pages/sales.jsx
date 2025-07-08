@@ -100,7 +100,7 @@ const Sales = () => {
 
   // ========== SALES FUNCTIONS ==========
   const handleAddSale = async () => {
-  if (!selectedItem || !quantity || !paymentMethod) {
+if (!selectedItem.trim() || !quantity.trim() || !paymentMethod.trim()) {
     return alert('Please select an item, enter quantity or amount, and choose a payment method.');
   }
 
