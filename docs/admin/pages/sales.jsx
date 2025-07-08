@@ -100,28 +100,31 @@ const Sales = () => {
 
   // ========== SALES FUNCTIONS ==========
   const handleAddSale = async () => {
-if (!selectedItem.trim() || !quantity.trim() || !paymentMethod.trim()) {
+  if (!selectedItem || quantity.trim() === '' || !paymentMethod) {
     return alert('Please select an item, enter quantity or amount, and choose a payment method.');
   }
 
   const item = inventory.find(inv => inv.id === Number(selectedItem));
   if (!item) return alert('Item not found.');
 
-  let qty;
-  const enteredValue = quantity.trim();
+  const entered = quantity.trim();
+  let qty = 0;
 
-  // Check if user entered amount (e.g. KSh 200) instead of quantity (e.g. 2kg)
-  if (enteredValue.includes('.') || Number(enteredValue) >= item.selling_price) {
-    const amount = parseFloat(enteredValue);
-    if (isNaN(amount) || amount <= 0) return alert('Amount must be a valid number greater than zero.');
+  // If user enters a decimal or value greater than price, assume it's an amount
+  const enteredNumber = parseFloat(entered);
 
-    // Calculate kg sold based on price and round down to nearest 1kg
-    qty = Math.floor(amount / item.selling_price);
-    if (qty < 1) return alert('Amount too low. Minimum sale is 1kg.');
+  if (entered.includes('.') || enteredNumber > item.selling_price) {
+    // Calculate quantity from amount
+    const approxQty = enteredNumber / item.selling_price;
+
+    // Round to nearest 1kg only if ≥ 0.5
+    qty = Math.round(approxQty);
+
+    if (qty < 1) return alert('Amount too low to sell at least 1kg.');
     if (item.quantity < qty) return alert('Not enough stock for requested amount.');
   } else {
-    // Quantity mode
-    qty = parseInt(enteredValue, 10);
+    // Treat as normal quantity
+    qty = parseInt(entered, 10);
     if (isNaN(qty) || qty <= 0) return alert('Quantity must be a valid number greater than zero.');
     if (item.quantity < qty) return alert('Not enough stock!');
   }
@@ -165,6 +168,7 @@ if (!selectedItem.trim() || !quantity.trim() || !paymentMethod.trim()) {
     setPaymentMethod('');
   }
 };
+
 
   // ========== ORDER FUNCTIONS ==========
   const addItemToOrder = () => {
