@@ -10,6 +10,7 @@ const Sales = () => {
   const [inventory, setInventory] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [amountPaid, setAmountPaid] = useState('');
 
 
 
@@ -100,15 +101,30 @@ const Sales = () => {
   // ========== SALES FUNCTIONS ==========
   const handleAddSale = async () => {
   if (!selectedItem || !quantity || !paymentMethod) {
-    return alert('Please select an item, enter quantity, and choose a payment method.');
+    return alert('Please select an item, enter quantity or amount, and choose a payment method.');
   }
 
   const item = inventory.find(inv => inv.id === Number(selectedItem));
   if (!item) return alert('Item not found.');
 
-  const qty = parseInt(quantity, 10);
-  if (isNaN(qty) || qty <= 0) return alert('Quantity must be a valid number greater than zero.');
-  if (item.quantity < qty) return alert('Not enough stock!');
+  let qty;
+  const enteredValue = quantity.trim();
+
+  // Check if user entered amount (e.g. KSh 200) instead of quantity (e.g. 2kg)
+  if (enteredValue.includes('.') || Number(enteredValue) >= item.selling_price) {
+    const amount = parseFloat(enteredValue);
+    if (isNaN(amount) || amount <= 0) return alert('Amount must be a valid number greater than zero.');
+
+    // Calculate kg sold based on price and round down to nearest 1kg
+    qty = Math.floor(amount / item.selling_price);
+    if (qty < 1) return alert('Amount too low. Minimum sale is 1kg.');
+    if (item.quantity < qty) return alert('Not enough stock for requested amount.');
+  } else {
+    // Quantity mode
+    qty = parseInt(enteredValue, 10);
+    if (isNaN(qty) || qty <= 0) return alert('Quantity must be a valid number greater than zero.');
+    if (item.quantity < qty) return alert('Not enough stock!');
+  }
 
   const total = item.selling_price * qty;
 
@@ -149,7 +165,6 @@ const Sales = () => {
     setPaymentMethod('');
   }
 };
-
 
   // ========== ORDER FUNCTIONS ==========
   const addItemToOrder = () => {
@@ -421,6 +436,15 @@ const Sales = () => {
     onChange={(e) => setQuantity(e.target.value)}
     min="1"
   />
+  {/* Amount Paid Input */}
+<input
+  type="number"
+  placeholder="Amount Paid (KSh)"
+  className="w-36 px-4 py-2 border rounded"
+  value={amountPaid}
+  onChange={(e) => setAmountPaid(e.target.value)}
+  min="0"
+/>
 
   {/* Payment Method Selector */}
   <select
@@ -429,7 +453,6 @@ const Sales = () => {
     className="w-40 px-4 py-2 border rounded"
     required
   >
-    <option value="">Payment Method</option>
     <option value="cash">Cash</option>
     <option value="mpesa">M-Pesa</option>
     <option value="bank">Bank</option>
