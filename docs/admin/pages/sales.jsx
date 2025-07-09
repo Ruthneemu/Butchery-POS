@@ -116,17 +116,20 @@ const [quantity, setQuantity] = useState('');
   if (amountPaid) {
     const amount = parseFloat(amountPaid);
     if (isNaN(amount) || amount <= 0) return alert('Enter a valid amount.');
-    qty = Math.floor(amount / item.selling_price);
-    if (qty < 1) return alert('Amount too low to sell at least 1kg.');
+
+    qty = amount / item.selling_price; // ✅ Allow decimals (e.g., 0.77kg)
+
+    if (qty <= 0) return alert('Amount too low to sell.');
     if (item.quantity < qty) return alert('Not enough stock for the amount entered.');
   } else if (quantity) {
-    qty = parseInt(quantity, 10);
+    qty = parseFloat(quantity); // ✅ Allow decimal quantity entry too
     if (isNaN(qty) || qty <= 0) return alert('Enter a valid quantity.');
     if (item.quantity < qty) return alert('Not enough stock.');
   }
 
   const total = item.selling_price * qty;
 
+  // ✅ Deduct exact qty from inventory
   const { error: updateError } = await supabase
     .from('inventory')
     .update({ quantity: item.quantity - qty })
@@ -137,6 +140,7 @@ const [quantity, setQuantity] = useState('');
     return alert('Failed to update inventory.');
   }
 
+  // ✅ Insert sale with exact qty
   const { error: insertError } = await supabase.from('sales').insert([{
     item_id: item.id,
     item_name: item.name,
@@ -156,6 +160,7 @@ const [quantity, setQuantity] = useState('');
       .update({ quantity: item.quantity })
       .eq('id', item.id);
   } else {
+    // ✅ Reset form
     setSelectedItem('');
     setQuantity('');
     setAmountPaid('');
