@@ -27,12 +27,14 @@ export default function Payroll() {
   const [editedNetPay, setEditedNetPay] = useState('');
   const fileInputRef = useRef();
 
+  const itemsPerPage = 5;
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     fetchPayrolls();
     fetchEmployees();
     fetchTimeCards();
-  }, []);
+  }, [filterStart, filterEnd, roleFilter, statusFilter]);
 
   const fetchPayrolls = async () => {
     let query = supabase
