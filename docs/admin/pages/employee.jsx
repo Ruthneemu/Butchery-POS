@@ -27,9 +27,6 @@ export default function Payroll() {
   const [editedNetPay, setEditedNetPay] = useState('');
   const fileInputRef = useRef();
 
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10; // Set items per page (you can adjust this)
 
   useEffect(() => {
     fetchPayrolls();
