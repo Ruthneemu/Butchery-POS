@@ -26,8 +26,10 @@ export default function Payroll() {
   const [editingNetPayId, setEditingNetPayId] = useState(null);
   const [editedNetPay, setEditedNetPay] = useState('');
   const fileInputRef = useRef();
-  const [currentPage, setCurrentPage] = useState(1); // Add this in your component
 
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10; // Set items per page (you can adjust this)
 
   useEffect(() => {
     fetchPayrolls();
@@ -72,6 +74,7 @@ export default function Payroll() {
     const filtered = selectedEmployee === 'all'
       ? employees
       : employees.filter(emp => emp.id === selectedEmployee);
+
     return filtered.map(employee => {
       const cards = timeCards.filter(c =>
         c.employee_id === employee.id &&
@@ -180,89 +183,91 @@ export default function Payroll() {
         <div className="bg-white p-6 rounded shadow mb-6">
           <h2 className="text-xl mb-4">Generate Payroll</h2>
           <div className="grid md:grid-cols-4 gap-4 mb-4">
-            <DatePicker selected={payPeriodStart} onChange={setPayPeriodStart} className="border p-2 rounded" />
-            <DatePicker selected={payPeriodEnd} onChange={setPayPeriodEnd} className="border p-2 rounded" />
-            <select value={selectedEmployee} onChange={e => setSelectedEmployee(e.target.value)} className="border p-2 rounded">
-              <option value="all">All Employees</option>
-              {employees.map(emp => <option key={emp.id} value={emp.id}>{emp.name}</option>)}
+            <DatePicker selected={payPeriodStart} onChange={date => setPayPeriodStart(date)} className="border p-2 rounded" />
+            <DatePicker selected={payPeriodEnd} onChange={date => setPayPeriodEnd(date)} className="border p-2 rounded" />
+            <select onChange={e => setRoleFilter(e.target.value)} className="border p-2 rounded">
+              <option value="">Filter by Role</option>
+              <option value="admin">Admin</option>
+              <option value="staff">Staff</option>
             </select>
-            <button onClick={() => setShowPayrollForm(true)} className="bg-blue-600 text-white py-2 rounded">Calculate</button>
+            <select onChange={e => setStatusFilter(e.target.value)} className="border p-2 rounded">
+              <option value="">Filter by Status</option>
+              <option value="paid">Paid</option>
+              <option value="pending">Pending</option>
+            </select>
           </div>
+          <button onClick={savePayrollsToDB} className="bg-blue-600 text-white py-2 rounded">Generate Payroll</button>
         </div>
 
-        {/* Payroll Preview */}
-        {showPayrollForm && (
-          <div className="bg-white p-6 rounded shadow mb-6">
-            <h2 className="text-xl mb-4">Preview</h2>
-            <table className="min-w-full mb-4">
-              <thead className="bg-gray-100"><tr><th>Name</th><th>Hours</th><th>Gross</th><th>Net</th><th>Taxes</th><th>Actions</th></tr></thead>
-              <tbody>
-                {calculatePayroll().map((r, i) => (
-                  <tr key={i} className="border-b">
-                    <td>{r.employee_name}</td>
-                    <td>{r.hours_worked}</td>
-                    <td>${r.gross_pay}</td>
-                    <td>${r.net_pay}</td>
-                    <td>${r.taxes}</td>
-                    <td><button onClick={() => exportToPDF(r)}><FiDownload /></button></td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            <button onClick={savePayrollsToDB} className="bg-green-600 text-white py-2 mr-2 rounded">Process</button>
-            <button onClick={() => setShowPayrollForm(false)} className="bg-gray-500 text-white py-2 rounded">Cancel</button>
-          </div>
-        )}
-
-        {/* Filter and Export */}
-        <div className="bg-white p-4 rounded shadow mb-4 flex flex-wrap gap-4">
-          <DatePicker selected={filterStart} onChange={setFilterStart} placeholderText="Start Date" className="border p-2 rounded" />
-          <DatePicker selected={filterEnd} onChange={setFilterEnd} placeholderText="End Date" className="border p-2 rounded" />
-          <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)} className="border p-2 rounded">
-            <option value="">All Roles</option>
-            {[...new Set(employees.map(e => e.role))].map(role => (
-              <option key={role} value={role}>{role}</option>
-            ))}
-          </select>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="border p-2 rounded">
-            <option value="">All Statuses</option>
-            <option value="paid">Paid</option>
-            <option value="pending">Pending</option>
-          </select>
-          <button onClick={fetchPayrolls} className="bg-blue-600 text-white py-2 px-4 rounded">Apply Filter</button>
-          <button onClick={() => exportToPDF(null, true)} className="bg-blue-500 text-white py-2 px-4 rounded">Export All</button>
-        </div>
-
-        {/* Payroll History */}
+        {/* Payroll List */}
         <div className="bg-white p-6 rounded shadow">
-          <h2 className="text-xl mb-4">Payroll History</h2>
-          <table className="min-w-full mb-4">
-            <thead className="bg-gray-100">
-              <tr><th>Period</th><th>Name</th><th>Net Pay</th><th>Status</th><th>Notes</th><th>Actions</th></tr>
+          <h2 className="text-xl mb-4">Payroll Records</h2>
+          <table className="w-full">
+            <thead>
+              <tr>
+                <th className="border p-2">Employee</th>
+                <th className="border p-2">Hours Worked</th>
+                <th className="border p-2">Net Pay</th>
+                <th className="border p-2">Status</th>
+                <th className="border p-2">Actions</th>
+              </tr>
             </thead>
             <tbody>
-              {currentItems.map(r => (
-                <tr key={r.id}>
-                  <td>{new Date(r.pay_period_start).toLocaleDateString()} - {new Date(r.pay_period_end).toLocaleDateString()}</td>
-                  <td>{r.employee?.name}</td>
-                  <td>${r.net_pay}</td>
-                  <td>{r.status}</td>
-                  <td>{r.notes || '-'}</td>
-                  <td>
-                    <button onClick={() => toggleStatus(r.id, r.status)} className="mr-2 text-blue-600">{r.status === 'paid' ? 'Mark Pending' : 'Mark Paid'}</button>
-                    <button onClick={() => exportToPDF(r)}><FiDownload /></button>
+              {currentItems.map(payroll => (
+                <tr key={payroll.id}>
+                  <td className="border p-2">{payroll.employee_name}</td>
+                  <td className="border p-2">{payroll.hours_worked}</td>
+                  <td className="border p-2">
+                    {editingNetPayId === payroll.id ? (
+                      <div className="flex items-center">
+                        <input
+                          type="number"
+                          value={editedNetPay}
+                          onChange={(e) => setEditedNetPay(e.target.value)}
+                          className="border p-1 rounded w-24"
+                        />
+                        <button onClick={() => handleNetPaySave(payroll.id)} className="ml-2 bg-green-600 text-white py-1 px-2 rounded">
+                          <FiCheck />
+                        </button>
+                      </div>
+                    ) : (
+                      payroll.net_pay
+                    )}
+                  </td>
+                  <td className="border p-2">{payroll.status}</td>
+                  <td className="border p-2">
+                    <button onClick={() => toggleStatus(payroll.id, payroll.status)} className="text-blue-600 hover:underline">
+                      Toggle Status
+                    </button>
+                    <button onClick={() => exportToPDF(payroll, false)} className="text-blue-600 ml-2">
+                      <FiDownload />
+                    </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
 
-        {/* Pagination */}
-        <div className="flex justify-between mt-6">
-          <button disabled={currentPage === 1} onClick={() => setCurrentPage(currentPage - 1)} className="bg-gray-500 text-white py-2 px-4 rounded">Previous</button>
-          <span>Page {currentPage} of {totalPages}</span>
-          <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(currentPage + 1)} className="bg-gray-500 text-white py-2 px-4 rounded">Next</button>
+          {/* Pagination */}
+          <div className="flex justify-between mt-4">
+            <button
+              onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className="px-4 py-2 bg-gray-200 rounded"
+            >
+              Previous
+            </button>
+            <div>
+              Page {currentPage} of {totalPages}
+            </div>
+            <button
+              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+              className="px-4 py-2 bg-gray-200 rounded"
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
     </Layout>
