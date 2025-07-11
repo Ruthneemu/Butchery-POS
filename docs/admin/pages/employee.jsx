@@ -26,6 +26,8 @@ export default function Payroll() {
   const [editingNetPayId, setEditingNetPayId] = useState(null);
   const [editedNetPay, setEditedNetPay] = useState('');
   const fileInputRef = useRef();
+  const [currentPage, setCurrentPage] = useState(1); // Add this in your component
+
 
   useEffect(() => {
     fetchPayrolls();
