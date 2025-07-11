@@ -17,21 +17,14 @@ export default function Payroll() {
   const [showPayrollForm, setShowPayrollForm] = useState(false);
   const [filterStart, setFilterStart] = useState(null);
   const [filterEnd, setFilterEnd] = useState(null);
-
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-
   const [newEmployeeName, setNewEmployeeName] = useState('');
   const [newEmployeeRate, setNewEmployeeRate] = useState('');
   const [newEmployeeRole, setNewEmployeeRole] = useState('');
   const [newEmployeePhoto, setNewEmployeePhoto] = useState(null);
-
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 10;
-
   const [editingNetPayId, setEditingNetPayId] = useState(null);
   const [editedNetPay, setEditedNetPay] = useState('');
-
   const fileInputRef = useRef();
 
   useEffect(() => {
@@ -53,11 +46,9 @@ export default function Payroll() {
     if (error) return;
 
     let filtered = data;
-
     if (roleFilter) {
       filtered = filtered.filter(row => row.employee?.role?.toLowerCase() === roleFilter.toLowerCase());
     }
-
     if (statusFilter) {
       filtered = filtered.filter(row => row.status?.toLowerCase() === statusFilter.toLowerCase());
     }
@@ -82,10 +73,9 @@ export default function Payroll() {
     return filtered.map(employee => {
       const cards = timeCards.filter(c =>
         c.employee_id === employee.id &&
-        new Date(c.clock_in) >= payPeriodStart &&
-        new Date(c.clock_in) <= payPeriodEnd &&
-        c.clock_out
-      );
+      new Date(c.clock_in) >= payPeriodStart && // Filter for clock_in after payPeriodStart
+      new Date(c.clock_in) <= payPeriodEnd // Add condition to filter by clock_in before payPeriodEnd
+    );
       const total = cards.reduce((sum, c) =>
         sum + ((new Date(c.clock_out) - new Date(c.clock_in)) / 3600000), 0
       );
@@ -250,42 +240,27 @@ export default function Payroll() {
             </thead>
             <tbody>
               {currentItems.map(r => (
-                <tr key={r.id} className="border-b hover:bg-gray-50">
-                  <td>{new Date(r.pay_period_start).toLocaleDateString()}–{new Date(r.pay_period_end).toLocaleDateString()}</td>
+                <tr key={r.id}>
+                  <td>{new Date(r.pay_period_start).toLocaleDateString()} - {new Date(r.pay_period_end).toLocaleDateString()}</td>
                   <td>{r.employee?.name}</td>
+                  <td>${r.net_pay}</td>
+                  <td>{r.status}</td>
+                  <td>{r.notes || '-'}</td>
                   <td>
-                    {editingNetPayId === r.id ? (
-                      <>
-                        <input value={editedNetPay} onChange={e => setEditedNetPay(e.target.value)} className="border p-1 w-24 rounded" />
-                        <button onClick={() => handleNetPaySave(r.id)} className="text-green-600 ml-1"><FiCheck /></button>
-                      </>
-                    ) : (
-                      <span onClick={() => { setEditingNetPayId(r.id); setEditedNetPay(r.net_pay); }} className="cursor-pointer">
-                        ${parseFloat(r.net_pay).toFixed(2)}
-                      </span>
-                    )}
+                    <button onClick={() => toggleStatus(r.id, r.status)} className="mr-2 text-blue-600">{r.status === 'paid' ? 'Mark Pending' : 'Mark Paid'}</button>
+                    <button onClick={() => exportToPDF(r)}><FiDownload /></button>
                   </td>
-                  <td>
-                    <button onClick={() => toggleStatus(r.id, r.status)} className={`px-2 py-1 rounded ${r.status === 'paid' ? 'bg-green-200' : 'bg-yellow-200'}`}>{r.status}</button>
-                  </td>
-                  <td>
-                    <input defaultValue={r.notes} onBlur={async e => {
-                      await supabase.from('payrolls').update({ notes: e.target.value }).eq('id', r.id);
-                      fetchPayrolls();
-                    }} className="border p-1 rounded w-full" />
-                  </td>
-                  <td><button onClick={() => exportToPDF(r)}><FiDownload /></button></td>
                 </tr>
               ))}
             </tbody>
           </table>
+        </div>
 
-          {/* Pagination */}
-          <div className="flex justify-between mt-4">
-            <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="bg-gray-300 px-4 py-1 rounded">Previous</button>
-            <span className="text-sm">Page {currentPage} of {totalPages}</span>
-            <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="bg-gray-300 px-4 py-1 rounded">Next</button>
-          </div>
+        {/* Pagination */}
+        <div className="flex justify-between mt-6">
+          <button disabled={currentPage === 1} onClick={() => setCurrentPage(currentPage - 1)} className="bg-gray-500 text-white py-2 px-4 rounded">Previous</button>
+          <span>Page {currentPage} of {totalPages}</span>
+          <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(currentPage + 1)} className="bg-gray-500 text-white py-2 px-4 rounded">Next</button>
         </div>
       </div>
     </Layout>
