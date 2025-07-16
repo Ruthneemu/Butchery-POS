@@ -2,8 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import supabase from '../supabaseClient';
 import Layout from "../components/layout";
 import { CSVLink } from 'react-csv';
-import { Chart } from 'chart.js/auto';
-import html2canvas from 'html2canvas';
 
 const Inventory = () => {
   const [products, setProducts] = useState([]);
@@ -18,9 +16,6 @@ const Inventory = () => {
   const [sellingPrice, setSellingPrice] = useState('');
   const [newImage, setNewImage] = useState(null);
 
-  // Bulk import states
-  const [bulkData, setBulkData] = useState('');
-  const [showBulkImport, setShowBulkImport] = useState(false);
   
   // Editing states
   const [editingProduct, setEditingProduct] = useState(null);
@@ -58,10 +53,7 @@ const Inventory = () => {
   const [nearExpiryFilter, setNearExpiryFilter] = useState(false);
   const [stockTakeMode, setStockTakeMode] = useState(false);
   const [stockTakeCounts, setStockTakeCounts] = useState({});
-  const [showInventoryChart, setShowInventoryChart] = useState(false);
   
-  const chartRef = useRef();
-  const chartInstance = useRef(null);
 
   // Fetch products from Supabase
   const fetchProducts = async () => {
@@ -119,27 +111,8 @@ const Inventory = () => {
     }
   };
 
-  useEffect(() => {
-    fetchProducts();
-    fetchPurchaseOrders();
-    
-    // Clean up chart on unmount
-    return () => {
-      if (chartInstance.current) {
-        chartInstance.current.destroy();
-      }
-    };
-  }, [searchTerm, lowStockFilter, nearExpiryFilter]);
-
-  // Initialize chart when showInventoryChart changes
-  useEffect(() => {
-    if (showInventoryChart && products.length > 0) {
-      renderInventoryChart();
-    } else if (chartInstance.current) {
-      chartInstance.current.destroy();
-      chartInstance.current = null;
-    }
-  }, [showInventoryChart, products]);
+  
+   
 
   // Upload image to Supabase storage
   const uploadImage = async (file, productId) => {
@@ -297,41 +270,7 @@ const Inventory = () => {
     }
   };
 
-  // Handle bulk import
-  const handleBulkImport = async () => {
-    try {
-      const lines = bulkData.split('\n');
-      const productsToImport = [];
-      
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        
-        const [name, quantity, price, unit = 'kg', expiry = null, sellingPrice = null] = line.split(',');
-        
-        productsToImport.push({
-          name: name.trim(),
-          quantity: Number(quantity.trim()),
-          price: Number(price.trim()),
-          unit: unit.trim(),
-          expiry_date: expiry?.trim() || null,
-          selling_price: sellingPrice ? Number(sellingPrice.trim()) : null
-        });
-      }
-      
-      const { error } = await supabase
-        .from('inventory')
-        .insert(productsToImport);
-        
-      if (error) throw error;
-      
-      setBulkData('');
-      setShowBulkImport(false);
-      fetchProducts();
-      alert('Products imported successfully!');
-    } catch (error) {
-      setError('Bulk import failed: ' + error.message);
-    }
-  };
+  
 
   // Stock take functions
   const startStockTake = () => {
@@ -373,127 +312,76 @@ const Inventory = () => {
     }
   };
 
-  // Generate inventory report
-  const generateReport = async () => {
-    try {
-      const canvas = await html2canvas(document.querySelector('#inventory-dashboard'));
-      const link = document.createElement('a');
-      link.download = 'inventory-report.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } catch (error) {
-      console.error('Error generating report:', error);
-    }
-  };
-
-  // Render inventory chart
-  const renderInventoryChart = () => {
-    if (chartInstance.current) {
-      chartInstance.current.destroy();
-    }
-    
-    const ctx = chartRef.current.getContext('2d');
-    
-    // Low stock products
-    const lowStockCount = products.filter(p => isLowStock(p.quantity)).length;
-    
-    chartInstance.current = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: ['Low Stock'],
-        datasets: [{
-          label: 'Inventory Overview',
-          data: [lowStockCount],
-          backgroundColor: ['rgba(255, 99, 132, 0.7)'],
-          borderColor: ['rgba(255, 99, 132, 1)'],
-          borderWidth: 1
-        }]
-      },
-      options: {
-        responsive: true,
-        plugins: {
-          title: {
-            display: true,
-            text: 'Inventory Overview'
-          },
-        },
-        scales: {
-          y: {
-            beginAtZero: true,
-            title: {
-              display: true,
-              text: 'Number of Products'
-            }
-          }
-        }
-      }
-    });
-  };
 
   // Stock Adjustment functions
   const createStockAdjustment = async () => {
-    if (!adjustmentProductId || !adjustmentQuantity || !adjustmentReason) {
-      alert('Please fill in all fields');
+  if (!adjustmentProductId || !adjustmentQuantity || !adjustmentReason) {
+    alert('Please fill in all required fields');
+    return;
+  }
+
+  try {
+    // Get current product
+    const { data: product, error: productError } = await supabase
+      .from('inventory')
+      .select('*')
+      .eq('id', adjustmentProductId)
+      .single();
+
+    if (productError) throw productError;
+    if (!product) throw new Error('Product not found');
+
+    // Calculate new quantity
+    const quantityChange = adjustmentType === 'increase' 
+      ? Number(adjustmentQuantity) 
+      : -Number(adjustmentQuantity);
+    
+    const newQuantity = product.quantity + quantityChange;
+
+    if (newQuantity < 0) {
+      alert('Resulting quantity cannot be negative');
       return;
     }
 
-    try {
-      // Get current product
-      const { data: product } = await supabase
-        .from('inventory')
-        .select('*')
-        .eq('id', adjustmentProductId)
-        .single();
+    // Update product quantity
+    const { error: updateError } = await supabase
+      .from('inventory')
+      .update({ quantity: newQuantity })
+      .eq('id', adjustmentProductId);
 
-      if (!product) throw new Error('Product not found');
+    if (updateError) throw updateError;
 
-      // Calculate new quantity
-      const quantityChange = adjustmentType === 'increase' 
-        ? Number(adjustmentQuantity) 
-        : -Number(adjustmentQuantity);
-      
-      const newQuantity = product.quantity + quantityChange;
+    // Record adjustment in stock_adjustments table
+    const { error: adjustmentError } = await supabase
+      .from('stock_adjustments')
+      .insert([{
+        product_id: adjustmentProductId,
+        product_name: product.name,
+        adjustment_type: adjustmentType,
+        quantity: adjustmentQuantity,
+        previous_quantity: product.quantity,
+        new_quantity: newQuantity,
+        reason: adjustmentReason,
+        adjustment_date: adjustmentDate,
+        adjusted_by: 'admin'
+      }])
+      .select(); // Add .select() to get better error reporting
 
-      if (newQuantity < 0) {
-        alert('Resulting quantity cannot be negative');
-        return;
-      }
+    if (adjustmentError) throw adjustmentError;
 
-      // Update product quantity
-      const { error: updateError } = await supabase
-        .from('inventory')
-        .update({ quantity: newQuantity })
-        .eq('id', adjustmentProductId);
-
-      if (updateError) throw updateError;
-
-      // Record adjustment in stock_adjustments table
-      const { error: adjustmentError } = await supabase
-        .from('stock_adjustments')
-        .insert([{
-          product_id: adjustmentProductId,
-          product_name: product.name,
-          adjustment_type: adjustmentType,
-          quantity: adjustmentQuantity,
-          previous_quantity: product.quantity,
-          new_quantity: newQuantity,
-          reason: adjustmentReason,
-          adjusted_by: 'admin' // In a real app, you'd use the logged-in user
-        }]);
-
-      if (adjustmentError) throw adjustmentError;
-
-      // Reset and refresh
-      setShowStockAdjustment(false);
-      setAdjustmentProductId(null);
-      setAdjustmentQuantity('');
-      setAdjustmentReason('');
-      fetchProducts();
-      alert('Stock adjustment recorded successfully!');
-    } catch (error) {
-      alert('Error recording adjustment: ' + error.message);
-    }
-  };
+    // Reset and refresh
+    setShowStockAdjustment(false);
+    setAdjustmentProductId(null);
+    setAdjustmentQuantity('');
+    setAdjustmentReason('');
+    fetchProducts();
+    alert('Stock adjustment recorded successfully!');
+    
+  } catch (error) {
+    console.error('Full error details:', error);
+    alert(`Error recording adjustment: ${error.message || 'Unknown error'}`);
+  }
+};
 
   // Purchase Order functions
   const createPurchaseOrder = async () => {
@@ -532,31 +420,35 @@ const Inventory = () => {
   };
 
   const addPoItem = () => {
-    if (!poItemProduct || !poItemQuantity) {
-      alert('Please select a product and enter quantity');
-      return;
-    }
+  if (!poItemProduct || !poItemQuantity) {
+    alert('Please select a product and enter quantity');
+    return;
+  }
 
-    const product = products.find(p => p.id === poItemProduct);
-    if (!product) return;
+  const product = products.find(p => p.id === poItemProduct);
+  if (!product) return;
 
-    setNewPurchaseOrder(prev => ({
-      ...prev,
-      items: [
-        ...prev.items,
-        {
-          product_id: product.id,
-          product_name: product.name,
-          quantity: Number(poItemQuantity),
-          price: product.price,
-          unit: product.unit
-        }
-      ]
-    }));
+  // Calculate price per unit (per kg)
+  const pricePerUnit = product.price / product.quantity;
 
-    setPoItemProduct('');
-    setPoItemQuantity('');
-  };
+  setNewPurchaseOrder(prev => ({
+    ...prev,
+    items: [
+      ...prev.items,
+      {
+        product_id: product.id,
+        product_name: product.name,
+        quantity: Number(poItemQuantity),
+        price: pricePerUnit, // This is now the price per unit
+        unit: product.unit,
+        total_cost: pricePerUnit * Number(poItemQuantity)
+      }
+    ]
+  }));
+
+  setPoItemProduct('');
+  setPoItemQuantity('');
+};
 
   const removePoItem = (index) => {
     setNewPurchaseOrder(prev => ({
@@ -640,33 +532,7 @@ const Inventory = () => {
       <div className="p-4 sm:p-6 bg-gray-50 min-h-screen w-full">
         <h1 className="text-2xl sm:text-3xl font-bold text-red-700 mb-6">Butchery Inventory Management</h1>
 
-        {/* Inventory Dashboard Summary */}
-        <div id="inventory-dashboard" className="bg-white p-4 rounded shadow mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Inventory Dashboard</h2>
-            <div className="flex space-x-2">
-              <button 
-                onClick={() => setShowInventoryChart(!showInventoryChart)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
-              >
-                {showInventoryChart ? 'Hide Chart' : 'Show Chart'}
-              </button>
-              <button 
-                onClick={generateReport}
-                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
-              >
-                Generate Report
-              </button>
-            </div>
-          </div>
-
-          {showInventoryChart && (
-            <div className="mb-6">
-              <canvas ref={chartRef} height="300"></canvas>
-            </div>
-          )}
-        </div>
-
+        
         {/* Search and Filter Controls */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 gap-4">
           <div className="flex flex-wrap items-center gap-4 w-full sm:w-auto">
@@ -812,183 +678,156 @@ const Inventory = () => {
           </div>
         )}
 
-        {/* Purchase Order Modal */}
-        {showPurchaseOrder && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
-              <h2 className="text-xl font-semibold mb-4">Create Purchase Order</h2>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block mb-1 font-medium">Supplier</label>
-                  <input
-                    type="text"
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newPurchaseOrder.supplier}
-                    onChange={(e) => setNewPurchaseOrder(prev => ({
-                      ...prev,
-                      supplier: e.target.value
-                    }))}
-                    placeholder="Supplier name"
-                  />
-                </div>
-                
-                <div>
-                  <label className="block mb-1 font-medium">Order Date</label>
-                  <input
-                    type="date"
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newPurchaseOrder.order_date}
-                    onChange={(e) => setNewPurchaseOrder(prev => ({
-                      ...prev,
-                      order_date: e.target.value
-                    }))}
-                  />
-                </div>
-                
-                <div>
-                  <label className="block mb-1 font-medium">Expected Delivery</label>
-                  <input
-                    type="date"
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newPurchaseOrder.expected_delivery}
-                    onChange={(e) => setNewPurchaseOrder(prev => ({
-                      ...prev,
-                      expected_delivery: e.target.value
-                    }))}
-                  />
-                </div>
-              </div>
-              
-              <div className="mb-4 border-t pt-4">
-                <h3 className="font-semibold mb-2">Order Items</h3>
-                
-                <div className="flex space-x-2 mb-4">
-                  <select
-                    className="flex-1 border border-gray-300 rounded px-3 py-2"
-                    value={poItemProduct}
-                    onChange={(e) => setPoItemProduct(e.target.value)}
-                  >
-                    <option value="">Select Product</option>
-                    {products.map(product => (
-                      <option key={product.id} value={product.id}>
-                        {product.name} ({product.price} KSh/{product.unit})
-                      </option>
-                    ))}
-                  </select>
-                  
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="w-24 border border-gray-300 rounded px-3 py-2"
-                    value={poItemQuantity}
-                    onChange={(e) => setPoItemQuantity(e.target.value)}
-                    placeholder="Qty"
-                  />
-                  
-                  <button
-                    onClick={addPoItem}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-                  >
-                    Add
-                  </button>
-                </div>
-                
-                {newPurchaseOrder.items.length > 0 ? (
-                  <div className="border rounded">
-                    <table className="min-w-full">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="px-4 py-2 text-left">Product</th>
-                          <th className="px-4 py-2 text-left">Quantity</th>
-                          <th className="px-4 py-2 text-left">Price</th>
-                          <th className="px-4 py-2 text-left">Total</th>
-                          <th className="px-4 py-2 text-left">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {newPurchaseOrder.items.map((item, index) => (
-                          <tr key={index} className="border-b">
-                            <td className="px-4 py-2">{item.product_name}</td>
-                            <td className="px-4 py-2">{item.quantity} {item.unit}</td>
-                            <td className="px-4 py-2">{item.price} KSh</td>
-                            <td className="px-4 py-2">{(item.quantity * item.price).toFixed(2)} KSh</td>
-                            <td className="px-4 py-2">
-                              <button
-                                onClick={() => removePoItem(index)}
-                                className="text-red-600 hover:text-red-800"
-                              >
-                                Remove
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot className="bg-gray-50">
-                        <tr>
-                          <td colSpan="3" className="px-4 py-2 font-semibold text-right">Total:</td>
-                          <td className="px-4 py-2 font-semibold">
-                            {newPurchaseOrder.items.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)} KSh
-                          </td>
-                          <td></td>
-                        </tr>
-                      </tfoot>
-                    </table>
-                  </div>
-                ) : (
-                  <p className="text-gray-500 text-center py-4">No items added yet</p>
-                )}
-              </div>
-              
-              <div className="flex justify-end space-x-2">
-                <button
-                  onClick={() => setShowPurchaseOrder(false)}
-                  className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={createPurchaseOrder}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
-                >
-                  Create Order
-                </button>
-              </div>
-            </div>
+{/* Purchase Order Modal */}
+{showPurchaseOrder && (
+  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+    <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
+      <h2 className="text-xl font-semibold mb-4">Create Purchase Order</h2>
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+        <div>
+          <label className="block mb-1 font-medium">Supplier</label>
+          <input
+            type="text"
+            className="w-full border border-gray-300 rounded px-3 py-2"
+            value={newPurchaseOrder.supplier}
+            onChange={(e) => setNewPurchaseOrder(prev => ({
+              ...prev,
+              supplier: e.target.value
+            }))}
+            placeholder="Supplier name"
+          />
+        </div>
+        
+        <div>
+          <label className="block mb-1 font-medium">Order Date</label>
+          <input
+            type="date"
+            className="w-full border border-gray-300 rounded px-3 py-2"
+            value={newPurchaseOrder.order_date}
+            onChange={(e) => setNewPurchaseOrder(prev => ({
+              ...prev,
+              order_date: e.target.value
+            }))}
+          />
+        </div>
+        
+        <div>
+          <label className="block mb-1 font-medium">Expected Delivery</label>
+          <input
+            type="date"
+            className="w-full border border-gray-300 rounded px-3 py-2"
+            value={newPurchaseOrder.expected_delivery}
+            onChange={(e) => setNewPurchaseOrder(prev => ({
+              ...prev,
+              expected_delivery: e.target.value
+            }))}
+          />
+        </div>
+      </div>
+      
+      <div className="mb-4 border-t pt-4">
+        <h3 className="font-semibold mb-2">Order Items</h3>
+        
+        <div className="flex space-x-2 mb-4">
+          <select
+  className="flex-1 border border-gray-300 rounded px-3 py-2"
+  value={poItemProduct}
+  onChange={(e) => setPoItemProduct(e.target.value)}
+>
+  <option value="">Select Product</option>
+  {products.map(product => (
+    <option key={product.id} value={product.id}>
+      {product.name} ({product.price ? (product.price / product.quantity).toFixed(2) : 0} KSh/{product.unit})
+    </option>
+  ))}
+</select>
+          
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            className="w-24 border border-gray-300 rounded px-3 py-2"
+            value={poItemQuantity}
+            onChange={(e) => setPoItemQuantity(e.target.value)}
+            placeholder="Qty"
+          />
+          
+          <button
+            onClick={addPoItem}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+          >
+            Add
+          </button>
+        </div>
+        
+        {newPurchaseOrder.items.length > 0 ? (
+          <div className="border rounded">
+            <table className="min-w-full">
+  <thead className="bg-gray-100">
+    <tr>
+      <th className="px-4 py-2 text-left">Item Name</th>
+      <th className="px-4 py-2 text-left">Quantity</th>
+      <th className="px-4 py-2 text-left">Unit Price (KSh)</th>
+      <th className="px-4 py-2 text-left">Total Cost (KSh)</th>
+      <th className="px-4 py-2 text-left">Action</th>
+    </tr>
+  </thead>
+  <tbody>
+    {newPurchaseOrder.items.map((item, index) => (
+      <tr key={index} className="border-b">
+        <td className="px-4 py-2">{item.product_name}</td>
+        <td className="px-4 py-2">{item.quantity} {item.unit}</td>
+        <td className="px-4 py-2">{item.price.toFixed(2)}</td>
+        <td className="px-4 py-2">{(item.price * item.quantity).toFixed(2)}</td>
+        <td className="px-4 py-2">
+          <button
+            onClick={() => removePoItem(index)}
+            className="text-red-600 hover:text-red-800"
+          >
+            Remove
+          </button>
+        </td>
+      </tr>
+    ))}
+  </tbody>
+  <tfoot className="bg-gray-50">
+    <tr>
+      <td colSpan="2" className="px-4 py-2 font-semibold text-right">Total:</td>
+      <td className="px-4 py-2"></td>
+      <td className="px-4 py-2 font-semibold">
+        {newPurchaseOrder.items
+          .reduce((sum, item) => sum + (item.price * item.quantity), 0)
+          .toFixed(2)} KSh
+      </td>
+      <td></td>
+    </tr>
+  </tfoot>
+</table>
           </div>
+        ) : (
+          <p className="text-gray-500 text-center py-4">No items added yet</p>
         )}
-
-        {/* Bulk Import Form */}
-        {showBulkImport && (
-          <div className="mb-8 bg-white p-4 sm:p-6 rounded shadow-md">
-            <h2 className="text-xl font-semibold mb-4">Bulk Import Products</h2>
-            <p className="text-sm text-gray-600 mb-4">
-              Enter product data in CSV format (Name, Quantity, Price, Unit, Expiry Date, Selling Price). One product per line.
-            </p>
-            <textarea
-              className="w-full border border-gray-300 rounded px-3 py-2 h-40 mb-4 font-mono text-sm"
-              value={bulkData}
-              onChange={(e) => setBulkData(e.target.value)}
-              placeholder="Example:&#10;Beef Ribeye,10,500,kg,2023-12-31,600&#10;Chicken Breast,20,300,kg,,350"
-            />
-            <div className="flex justify-end space-x-2">
-              <button
-                onClick={handleBulkImport}
-                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
-              >
-                Import Products
-              </button>
-              <button
-                onClick={() => setShowBulkImport(false)}
-                className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
+      </div>
+      
+      <div className="flex justify-end space-x-2">
+        <button
+          onClick={() => setShowPurchaseOrder(false)}
+          className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={createPurchaseOrder}
+          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
+        >
+          Create Order
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+    
         {/* Purchase Orders Section */}
         <div className="mb-8 bg-white rounded shadow-md overflow-hidden">
           <div className="flex justify-between items-center bg-red-700 text-white p-4">
