@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import supabase from '../supabaseClient';
 import { useNavigate, useLocation } from 'react-router-dom'; // Import useLocation
 import { FaEye, FaEyeSlash } from 'react-icons/fa'; // For password visibility
-import { LuLoader2 } from 'react-icons/lu'; // For spinner icon
+import { LuLoader } from 'react-icons/lu'; // For spinner icon
 
 export default function Login() {
   const [email, setEmail] = useState('');
@@ -260,7 +260,7 @@ export default function Login() {
                   isLoginButtonDisabled ? 'bg-blue-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
                 }`}
               >
-                {loading && <LuLoader2 className="animate-spin" />}
+                {loading && <LuLoader className="animate-spin" />}
                 {loading ? 'Logging in...' : 'Login'}
               </button>
             </div>
@@ -309,7 +309,7 @@ export default function Login() {
                 isResetButtonDisabled ? 'bg-blue-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
               }`}
             >
-              {loading && <LuLoader2 className="animate-spin" />}
+              {loading && <LuLoader className="animate-spin" />}
               {loading ? 'Sending...' : 'Send Reset Link'}
             </button>
             <button
@@ -384,7 +384,7 @@ export default function Login() {
                 isUpdateButtonDisabled ? 'bg-blue-400 cursor-not-allowed' : 'bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700'
               }`}
             >
-              {loading && <LuLoader2 className="animate-spin" />}
+              {loading && <LuLoader className="animate-spin" />}
               {loading ? 'Updating...' : 'Update Password'}
             </button>
             <button
