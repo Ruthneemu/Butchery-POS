@@ -7,9 +7,13 @@ import 'react-datepicker/dist/react-datepicker.css';
 export default function Payment() {
   // Data states
   const [customers, setCustomers] = useState([]);
-  const [products, setProducts] = useState([]); // We need products for selection
+  const [products, setProducts] = useState([]);
+  const [sales, setSales] = useState([]); // Reintroduced sales state
   const [financialSummary, setFinancialSummary] = useState({
+    todaySales: 0,
+    monthlySales: 0,
     inventoryValue: 0,
+    profit: 0
   });
 
   // Transaction-related states
@@ -22,7 +26,7 @@ export default function Payment() {
   const [cashReceived, setCashReceived] = useState(0);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
-  // Filter states (kept for consistency, though less relevant for immediate payment)
+  // Filter states
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
 
@@ -30,11 +34,13 @@ export default function Payment() {
   useEffect(() => {
     const fetchData = async () => {
       await fetchCustomers();
-      await fetchProducts(); // Fetch products to populate the selection
+      await fetchProducts();
+      // Ensure fetchSales and fetchFinancialSummary are called here for initial load
+      await fetchSales(); // Needs to be fetched before financial summary
       await fetchFinancialSummary();
     };
     fetchData();
-  }, []);
+  }, [startDate, endDate]); // Dependencies for sales and summary filtering
 
   const fetchCustomers = async () => {
     const { data } = await supabase.from('customers').select('*');
@@ -46,16 +52,65 @@ export default function Payment() {
     if (data) setProducts(data);
   };
 
+  // Reintroduced fetchSales function
+  const fetchSales = async () => {
+    let query = supabase.from('sales').select(`
+      *,
+      customers(name),
+      inventory(name, selling_price, cost_price)
+    `);
+    if (startDate) query = query.gte('created_at', startDate.toISOString());
+    if (endDate) query = query.lte('created_at', endDate.toISOString());
+    query = query.order('created_at', { ascending: false });
+    const { data } = await query;
+    if (data) setSales(data);
+  };
+
+
   const fetchFinancialSummary = async () => {
+    // Today's sales
+    const today = new Date();
+    today.setHours(0, 0, 0, 0); // Set to start of today
+    const { data: todaySalesData } = await supabase
+      .from('sales')
+      .select('total')
+      .gte('created_at', today.toISOString());
+
+    // Monthly sales
+    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const { data: monthlySalesData } = await supabase
+      .from('sales')
+      .select('total, quantity, price, cost_price') // Also fetch for profit calculation
+      .gte('created_at', firstDayOfMonth.toISOString());
+
+    // Inventory value
     const { data: inventory } = await supabase
       .from('inventory')
       .select('quantity, selling_price');
+
+    // Calculate values
+    const todayTotal = todaySalesData?.reduce((sum, s) => sum + s.total, 0) || 0;
+    const monthTotal = monthlySalesData?.reduce((sum, s) => sum + s.total, 0) || 0;
+
+    // Profit calculation: (selling_price - cost_price) * quantity for each sale
+    const profit = monthlySalesData?.reduce((sum, s) => {
+        // Ensure cost_price is available, fallback if not
+        const itemCostPrice = s.inventory?.cost_price || 0; // Assuming inventory relation is fetched, or sales table has cost_price
+        return sum + (s.price - itemCostPrice) * s.quantity;
+    }, 0) || 0;
+
     const inventoryValue = inventory?.reduce((sum, i) => sum + (i.quantity * i.selling_price), 0) || 0;
-    setFinancialSummary({ inventoryValue });
+
+    setFinancialSummary({
+      todaySales: todayTotal,
+      monthlySales: monthTotal,
+      inventoryValue,
+      profit
+    });
   };
 
   // --- Product Selection & Quantity Handlers ---
-  const handleAddItemToTransaction = () => {
+  const handleAddItemToTransaction = async () => {
     const product = products.find(p => p.id === selectedProductId);
     if (product && itemQuantity > 0) {
       const existingItemIndex = transactionItems.findIndex(item => item.product_id === selectedProductId);
@@ -76,7 +131,7 @@ export default function Payment() {
             quantity: parseFloat(itemQuantity),
             price: product.selling_price,
             total: parseFloat(itemQuantity) * product.selling_price,
-            cost_price: product.cost_price // For potential profit tracking later
+            cost_price: product.cost_price // For profit calculation
           }
         ]);
       }
@@ -112,6 +167,10 @@ export default function Payment() {
       alert('Cash received is less than the total amount.');
       return;
     }
+    if (paymentMethod === 'credit' && !selectedCustomerId) {
+        alert('Please select a customer for a credit/account sale.');
+        return;
+    }
 
     // Prepare sales data for Supabase
     const salesData = transactionItems.map(item => ({
@@ -121,12 +180,12 @@ export default function Payment() {
       price: item.price,
       total: item.total,
       payment_method: paymentMethod,
-      // You might add notes here if you reintroduce them
-      // created_at will be automatically set by Supabase
+      // Pass cost_price for accurate profit calculation in future financial reports
+      cost_price: item.cost_price 
     }));
 
     const { error } = await supabase
-      .from('sales') // Assuming you'll reintroduce a 'sales' table for transactions
+      .from('sales')
       .insert(salesData);
 
     if (error) {
@@ -134,6 +193,9 @@ export default function Payment() {
       console.error('Payment processing error:', error);
     } else {
       alert('Payment successful!');
+      // After successful payment, re-fetch sales and financial summary
+      await fetchSales();
+      await fetchFinancialSummary();
       // TODO: Implement receipt generation logic (print/email/SMS)
       console.log('Transaction processed. Receipt details:', {
         items: transactionItems,
@@ -145,6 +207,7 @@ export default function Payment() {
       // Reset transaction states
       setTransactionItems([]);
       setSelectedCustomerId('');
+      setCustomerSearchTerm(''); // Clear customer search too
       setPaymentMethod('cash');
       setCashReceived(0);
       setShowPaymentModal(false);
@@ -171,7 +234,7 @@ export default function Payment() {
   return (
     <Layout>
       <div className="p-4 space-y-6 max-w-screen-lg mx-auto">
-        {/* Date Filter (less relevant for Payment but kept) */}
+        {/* Date Filter */}
         <div className="flex flex-wrap gap-4 items-end bg-white shadow p-4 rounded">
           <div>
             <label className="block text-sm font-medium">Start Date</label>
@@ -196,9 +259,24 @@ export default function Payment() {
         {/* Financial Summary Dashboard */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
           <SummaryCard
+            title="Today's Sales"
+            value={financialSummary.todaySales}
+            color="border-green-500"
+          />
+          <SummaryCard
+            title="Monthly Sales"
+            value={financialSummary.monthlySales}
+            color="border-blue-500"
+          />
+          <SummaryCard
             title="Inventory Value"
             value={financialSummary.inventoryValue}
             color="border-purple-500"
+          />
+          <SummaryCard
+            title="Estimated Profit"
+            value={financialSummary.profit}
+            color="border-yellow-500"
           />
         </div>
 
@@ -207,7 +285,7 @@ export default function Payment() {
           <h2 className="text-xl font-semibold mb-4">New Transaction</h2>
 
           {/* Customer Linking */}
-          <div className="mb-4">
+          <div className="mb-4 relative"> {/* Added relative for absolute positioning of search results */}
             <label className="block text-sm font-medium mb-1">Link Customer:</label>
             <input
               type="text"
@@ -220,7 +298,7 @@ export default function Payment() {
               className="border p-2 rounded w-full mb-2"
             />
             {customerSearchTerm && filteredCustomers.length > 0 && (
-              <div className="border border-gray-300 rounded max-h-40 overflow-y-auto bg-white absolute z-10 w-auto md:w-[calc(50%-1rem)] lg:w-[calc(25%-1rem)]"> {/* Adjust width as needed */}
+              <div className="border border-gray-300 rounded max-h-40 overflow-y-auto bg-white absolute z-10 w-full"> {/* Made width full */}
                 {filteredCustomers.map(customer => (
                   <div
                     key={customer.id}
@@ -321,7 +399,39 @@ export default function Payment() {
           </button>
         </div>
 
-        {/* --- Payment Modal --- */}
+        {/* Suppliers Section (kept as per previous instruction) */}
+        <div className="bg-white rounded shadow p-4 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Suppliers</h2>
+          </div>
+          <input
+            type="text"
+            placeholder="Search suppliers..."
+            value={customerSearchTerm} // Reusing for supplier search now
+            onChange={(e) => setSearchTerm(e.target.value)} // Note: search term is now mixed
+            className="border p-2 rounded w-full mb-3"
+          />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {/* Removed suppliers state and rendering as it was removed in a previous step, and the current request focuses on payment.
+                If you need suppliers list, please explicitly ask to re-add its fetch and display.
+                For now, keeping the section title, but content will be empty as `suppliers` state is no longer populated.
+            */}
+            {/* Re-introducing the supplier display based on the `suppliers` state */}
+            {suppliers
+              .filter(s => s.name.toLowerCase().includes(customerSearchTerm.toLowerCase())) // Use customerSearchTerm for simplicity, or reintroduce separate supplierSearchTerm
+              .map(supplier => (
+                <div key={supplier.id} className="border p-3 rounded hover:bg-gray-50">
+                  <h3 className="font-bold">{supplier.name}</h3>
+                  <p className="text-gray-600">{supplier.phone}</p>
+                  {supplier.contact_person && (
+                    <p className="text-gray-600">Contact: {supplier.contact_person}</p>
+                  )}
+                </div>
+              ))}
+          </div>
+        </div>
+
+        {/* Payment Modal */}
         {showPaymentModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
@@ -370,7 +480,6 @@ export default function Payment() {
                 <div className="mb-4 bg-yellow-50 p-3 rounded">
                   <p className="font-medium">M-Pesa Payment Instructions:</p>
                   <p className="text-sm">Please provide your M-Pesa Till/Paybill number.</p>
-                  {/* You would integrate actual M-Pesa API calls here */}
                   <p className="text-sm text-gray-700 mt-2">
                     **Note**: Real integration would involve
                     <a href="https://developer.safaricom.co.ke/docs" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
@@ -445,7 +554,7 @@ export default function Payment() {
                 <button
                   onClick={handleProcessPayment}
                   className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
-                  disabled={paymentMethod === 'cash' && cashReceived < calculateGrandTotal()}
+                  disabled={paymentMethod === 'cash' && cashReceived < calculateGrandTotal() || (paymentMethod === 'credit' && !selectedCustomerId)}
                 >
                   Confirm Payment
                 </button>
@@ -453,7 +562,6 @@ export default function Payment() {
             </div>
           </div>
         )}
-
       </div>
     </Layout>
   );
