@@ -5,42 +5,6 @@ import Layout from '../components/layout';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { FiUser, FiMail, FiLock, FiBell, FiBriefcase, FiKey, FiAlertCircle, FiLogOut, FiSave, FiEdit, FiTrash2, FiRefreshCcw } from 'react-icons/fi';
-import Modal from '../components/Modal'; // Assuming you have a reusable Modal component
-
-// You might want to create a reusable Modal component
-// If you don't have one, here's a basic example:
-// components/Modal.js
-/*
-import React from 'react';
-
-const Modal = ({ isOpen, onClose, title, children, actions }) => {
-  if (!isOpen) return null;
-
-  return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-75 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-lg shadow-xl w-full max-w-lg overflow-hidden">
-        <div className="flex justify-between items-center p-4 border-b">
-          <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-700">
-            &times;
-          </button>
-        </div>
-        <div className="p-4">
-          {children}
-        </div>
-        {actions && (
-          <div className="flex justify-end p-4 border-t space-x-2">
-            {actions}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
-export default Modal;
-*/
-
 
 export default function Settings() {
   const [user, setUser] = useState(null);
