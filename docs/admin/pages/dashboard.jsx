@@ -1,9 +1,18 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
 } from "recharts";
-import Layout from "../components/layout";
+import { toast, ToastContainer } from 'react-toastify'; // Ensure ToastContainer and toast are imported
+import 'react-toastify/dist/ReactToastify.css'; // Don't forget to import the CSS!
+
+import Layout from "../components/layout"; // Assuming 'layout' is correct
 import supabase from "../supabaseClient";
 
 // --- Constants ---
@@ -12,6 +21,7 @@ const EXPIRY_DAYS_THRESHOLD = 7; // Products expiring within this many days are 
 
 // --- Helper Functions ---
 const formatCurrency = (amount) => {
+  // Use 'en-US' or specific locale if 'en-KE' is not universally supported in build environments
   return new Intl.NumberFormat('en-KE', { style: 'currency', currency: 'KES' }).format(amount);
 };
 
@@ -35,10 +45,11 @@ const getStartEndDate = (range) => {
     case 'last_month':
       startDate.setMonth(now.getMonth() - 1);
       startDate.setDate(1);
-      endDate = new Date(now.getFullYear(), now.getMonth(), 0); // Last day of previous month
+      // Set to the last day of the previous month
+      endDate = new Date(now.getFullYear(), now.getMonth(), 0);
       endDate.setHours(23, 59, 59, 999);
       break;
-    default: // Today or any default
+    default: // 'today' or any other default
       break;
   }
   return { startDate, endDate };
@@ -81,6 +92,7 @@ const Dashboard = () => {
     recentSales: null,
   });
 
+  // Using `toast` directly, as it's imported from 'react-toastify'
   const notify = (msg, type = 'error') => toast[type](msg);
 
   // --- Data Fetching Functions ---
@@ -92,15 +104,18 @@ const Dashboard = () => {
       const { data: products, error: productError } = await supabase
         .from("inventory")
         .select("id, quantity, expiry_date");
+      // Note: `setHours(0,0,0,0)` on a new Date object correctly sets it to the start of today
       const { data: sales, error: salesError } = await supabase
         .from("sales")
         .select("total, created_at")
-        .gte('created_at', new Date().setHours(0,0,0,0).toISOString()); // Only fetch today's sales for summary
+        .gte('created_at', new Date().setHours(0,0,0,0).toISOString());
 
-      if (productError || salesError) throw productError || salesError;
+      if (productError || salesError) {
+        throw productError || salesError;
+      }
 
       const now = new Date();
-      now.setHours(0,0,0,0); // Start of today
+      now.setHours(0,0,0,0); // Start of today for consistent expiry calculation
 
       const lowStockCount = products.filter((p) => p.quantity < LOW_STOCK_THRESHOLD).length;
       const expiringSoonCount = products.filter((p) => {
@@ -119,9 +134,11 @@ const Dashboard = () => {
         lowStock: lowStockCount,
         expiringSoon: expiringSoonCount,
       });
+
+      // Cache raw value for totalSalesToday for proper re-formatting on load
       localStorage.setItem("dashboardSummaryCache", JSON.stringify({
         totalProducts: products.length,
-        totalSalesToday, // Store raw value for calculation
+        totalSalesToday: totalSalesToday, // Store raw value
         lowStock: lowStockCount,
         expiringSoon: expiringSoonCount,
       }));
@@ -133,7 +150,7 @@ const Dashboard = () => {
     } finally {
       setLoading(prev => ({ ...prev, summary: false }));
     }
-  }, []);
+  }, [notify]); // Add notify to useCallback dependencies
 
   const fetchSalesTrend = useCallback(async (range) => {
     setLoading(prev => ({ ...prev, trend: true }));
@@ -152,11 +169,13 @@ const Dashboard = () => {
 
       const trendMap = {};
       let currentDate = new Date(startDate);
+      // Populate trendMap with all days in the range, initialized to 0
       while (currentDate <= endDate) {
         trendMap[currentDate.toDateString()] = 0;
         currentDate.setDate(currentDate.getDate() + 1);
       }
 
+      // Aggregate sales data into the trend map
       sales.forEach((s) => {
         const d = new Date(s.created_at).toDateString();
         if (trendMap[d] !== undefined) {
@@ -178,7 +197,7 @@ const Dashboard = () => {
     } finally {
       setLoading(prev => ({ ...prev, trend: false }));
     }
-  }, []);
+  }, [notify]); // Add notify to useCallback dependencies
 
   const fetchRecentSales = useCallback(async () => {
     setLoading(prev => ({ ...prev, recentSales: true }));
@@ -186,7 +205,7 @@ const Dashboard = () => {
     try {
       const { data: sales, error: salesError } = await supabase
         .from("sales")
-        .select("id, item_name, quantity, total, created_at, payment_method") // Added payment_method
+        .select("id, item_name, quantity, total, created_at, payment_method")
         .order("created_at", { ascending: false })
         .limit(5); // Only fetch top 5 recent sales
 
@@ -197,7 +216,7 @@ const Dashboard = () => {
         product: s.item_name || 'N/A', // Fallback if item_name is missing
         qty: s.quantity,
         amount: formatCurrency(s.total),
-        time: new Date(s.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: new Date(s.created_at).toLocaleTimeString('en-KE', { hour: "2-digit", minute: "2-digit" }), // Using 'en-KE' locale
         paymentMethod: s.payment_method || '-', // Display payment method
       }));
       setRecentSales(recent);
@@ -210,12 +229,12 @@ const Dashboard = () => {
     } finally {
       setLoading(prev => ({ ...prev, recentSales: false }));
     }
-  }, []);
+  }, [notify]); // Add notify to useCallback dependencies
 
 
   // --- Effects ---
 
-  // Initial data fetch and caching
+  // Initial data fetch and caching logic
   useEffect(() => {
     // Attempt to load from cache first
     const cachedSummary = localStorage.getItem("dashboardSummaryCache");
@@ -234,51 +253,64 @@ const Dashboard = () => {
       setLoading(prev => ({ ...prev, trend: false }));
     }
     if (cachedRecent) {
-      setRecentSales(JSON.parse(cachedRecent).map(s => ({...s, amount: formatCurrency(s.amount.replace('KES ', ''))}))); // Re-format amount
+      const parsed = JSON.parse(cachedRecent);
+      // Ensure amount is formatted correctly if it was stored without currency symbol
+      setRecentSales(parsed.map(s => ({
+        ...s,
+        // Check if amount is already formatted or needs re-formatting
+        amount: s.amount.startsWith('KES') ? s.amount : formatCurrency(parseFloat(s.amount.toString().replace('KES ', '')) || 0)
+      })));
       setLoading(prev => ({ ...prev, recentSales: false }));
     }
 
-    // Always fetch fresh data on mount
+    // Always fetch fresh data on mount (even if cached, for real-time updates)
     fetchSummaryData();
     fetchRecentSales();
-    // Fetch trend based on default or cached range
     fetchSalesTrend(cachedTrend ? JSON.parse(cachedTrend).range : '7_days');
 
-  }, [fetchSummaryData, fetchRecentSales, fetchSalesTrend]);
+  }, [fetchSummaryData, fetchRecentSales, fetchSalesTrend]); // Dependencies for initial fetch
 
-  // Refetch sales trend when range changes
+  // Refetch sales trend when range changes (this is separate from initial load)
   useEffect(() => {
     fetchSalesTrend(salesTrendRange);
-  }, [salesTrendRange, fetchSalesTrend]);
+  }, [salesTrendRange, fetchSalesTrend]); // Dependencies for trend range change
 
   // Realtime Subscriptions
   useEffect(() => {
+    // Subscribe to sales changes
     const salesChannel = supabase
       .channel("realtime-sales")
       .on("postgres_changes", { event: "*", schema: "public", table: "sales" }, () => {
+        // When sales change, refresh relevant data
         fetchSummaryData();
         fetchRecentSales();
         fetchSalesTrend(salesTrendRange); // Refresh trend with current range
       })
       .subscribe();
 
+    // Subscribe to inventory changes
     const inventoryChannel = supabase
       .channel("realtime-inventory")
       .on("postgres_changes", { event: "*", schema: "public", table: "inventory" }, () => {
-        fetchSummaryData(); // Inventory changes affect low stock/expiring soon
+        // Inventory changes primarily affect low stock/expiring soon in summary
+        fetchSummaryData();
       })
       .subscribe();
 
+    // Cleanup function: Unsubscribe from channels when component unmounts
     return () => {
       supabase.removeChannel(salesChannel);
       supabase.removeChannel(inventoryChannel);
     };
-  }, [fetchSummaryData, fetchRecentSales, fetchSalesTrend, salesTrendRange]);
+  }, [fetchSummaryData, fetchRecentSales, fetchSalesTrend, salesTrendRange]); // Dependencies for realtime subscriptions
 
 
   return (
     <Layout title="Dashboard">
+      {/* ToastContainer must be rendered once at a high level in your app */}
+      {/* This line is correct for React Toastify, ensure react-toastify is installed and its CSS imported */}
       <ToastContainer position="top-right" autoClose={3000} />
+
       <h1 className="text-3xl font-bold mb-6 text-gray-800">📊 Dashboard Overview</h1>
 
       {/* Summary Cards */}
