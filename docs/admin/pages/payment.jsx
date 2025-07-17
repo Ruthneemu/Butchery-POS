@@ -6,21 +6,23 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
 export default function Payment() {
-  // Payment states
-  const [customerPayments, setCustomerPayments] = useState([]);
-  const [supplierPayments, setSupplierPayments] = useState([]);
-  const [sales, setSales] = useState([]);
-  
-  // Customer/Supplier states
+  // Data states
   const [customers, setCustomers] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
   const [products, setProducts] = useState([]);
-  
+  const [sales, setSales] = useState([]);
+  const [financialSummary, setFinancialSummary] = useState({
+    todaySales: 0,
+    monthlySales: 0,
+    inventoryValue: 0,
+    profit: 0
+  });
+
   // Form visibility states
   const [showCustomerForm, setShowCustomerForm] = useState(false);
   const [showSupplierForm, setShowSupplierForm] = useState(false);
   const [showSaleForm, setShowSaleForm] = useState(false);
-  
+
   // Form data states
   const [newCustomer, setNewCustomer] = useState({
     name: '',
@@ -47,31 +49,21 @@ export default function Payment() {
   });
 
   // Filter states
-  const [customerSearch, setCustomerSearch] = useState('');
-  const [supplierSearch, setSupplierSearch] = useState('');
-  const [productSearch, setProductSearch] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
 
-  // Fetch all data on component mount
+  // Fetch all data
   useEffect(() => {
-    fetchPayments('customer_payments', setCustomerPayments);
-    fetchPayments('supplier_payments', setSupplierPayments);
-    fetchCustomers();
-    fetchSuppliers();
-    fetchProducts();
-    fetchSales();
+    const fetchData = async () => {
+      await fetchCustomers();
+      await fetchSuppliers();
+      await fetchProducts();
+      await fetchSales();
+      await fetchFinancialSummary();
+    };
+    fetchData();
   }, [startDate, endDate]);
-
-  // Data fetching functions
-  const fetchPayments = async (table, setter) => {
-    let query = supabase.from(table).select('*');
-    if (startDate) query = query.gte('created_at', startDate.toISOString());
-    if (endDate) query = query.lte('created_at', endDate.toISOString());
-    query = query.order('created_at', { ascending: false });
-    const { data } = await query;
-    if (data) setter(data);
-  };
 
   const fetchCustomers = async () => {
     const { data } = await supabase.from('customers').select('*');
@@ -99,6 +91,41 @@ export default function Payment() {
     query = query.order('created_at', { ascending: false });
     const { data } = await query;
     if (data) setSales(data);
+  };
+
+  const fetchFinancialSummary = async () => {
+    // Today's sales
+    const today = new Date().toISOString().split('T')[0];
+    const { data: todaySales } = await supabase
+      .from('sales')
+      .select('total')
+      .gte('created_at', today);
+
+    // Monthly sales
+    const firstDayOfMonth = new Date();
+    firstDayOfMonth.setDate(1);
+    const { data: monthlySales } = await supabase
+      .from('sales')
+      .select('total')
+      .gte('created_at', firstDayOfMonth.toISOString());
+
+    // Inventory value
+    const { data: inventory } = await supabase
+      .from('inventory')
+      .select('quantity, selling_price');
+
+    // Calculate values
+    const todayTotal = todaySales?.reduce((sum, s) => sum + s.total, 0) || 0;
+    const monthTotal = monthlySales?.reduce((sum, s) => sum + s.total, 0) || 0;
+    const inventoryValue = inventory?.reduce((sum, i) => sum + (i.quantity * i.selling_price), 0) || 0;
+    const profit = monthTotal * 0.3; // Assuming 30% profit margin
+
+    setFinancialSummary({
+      todaySales: todayTotal,
+      monthlySales: monthTotal,
+      inventoryValue,
+      profit
+    });
   };
 
   // Form handlers
@@ -146,7 +173,6 @@ export default function Payment() {
       return;
     }
 
-    // Get product price if not manually entered
     const selectedProduct = products.find(p => p.id === newSale.product_id);
     const salePrice = newSale.price || selectedProduct.selling_price;
 
@@ -159,7 +185,8 @@ export default function Payment() {
         price: salePrice,
         total: salePrice * newSale.quantity,
         payment_method: newSale.payment_method,
-        notes: newSale.notes
+        notes: newSale.notes,
+        cost_price: selectedProduct.price // For profit calculation
       }]);
 
     if (error) {
@@ -175,7 +202,8 @@ export default function Payment() {
         notes: ''
       });
       fetchSales();
-      fetchProducts(); // Refresh inventory
+      fetchProducts();
+      fetchFinancialSummary();
     }
   };
 
@@ -192,58 +220,13 @@ export default function Payment() {
     }
   }, [newSale.product_id, products]);
 
-  // Reusable section component
-  const DataSection = ({ 
-    title, 
-    data, 
-    searchValue, 
-    onSearchChange, 
-    searchKey,
-    onAddNew,
-    renderItem,
-    csvFileName 
-  }) => {
-    const filteredData = data.filter(item =>
-      item[searchKey]?.toLowerCase().includes(searchValue.toLowerCase())
-    );
-
-    return (
-      <section className="bg-white rounded shadow p-4 mb-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold">{title}</h2>
-          <div className="flex gap-2">
-            {onAddNew && (
-              <button
-                onClick={onAddNew}
-                className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
-              >
-                + New
-              </button>
-            )}
-            <CSVLink
-              data={filteredData}
-              filename={csvFileName}
-              className="bg-green-600 text-white px-3 py-1 rounded text-sm"
-            >
-              Export CSV
-            </CSVLink>
-          </div>
-        </div>
-
-        <input
-          type="text"
-          placeholder={`Search ${searchKey.replace('_', ' ')}...`}
-          value={searchValue}
-          onChange={e => onSearchChange(e.target.value)}
-          className="border p-2 rounded w-full mb-3"
-        />
-
-        <div className="space-y-3">
-          {filteredData.map(item => renderItem(item))}
-        </div>
-      </section>
-    );
-  };
+  // Reusable card component for financial summary
+  const SummaryCard = ({ title, value, color }) => (
+    <div className={`bg-white p-4 rounded shadow border-l-4 ${color}`}>
+      <h3 className="font-medium text-gray-500">{title}</h3>
+      <p className="text-2xl font-bold">KSh {value.toLocaleString()}</p>
+    </div>
+  );
 
   return (
     <Layout>
@@ -254,7 +237,7 @@ export default function Payment() {
             <label className="block text-sm font-medium">Start Date</label>
             <DatePicker 
               selected={startDate} 
-              onChange={date => setStartDate(date)} 
+              onChange={setStartDate} 
               className="border p-2 rounded w-full" 
               placeholderText="Select start date"
             />
@@ -263,81 +246,134 @@ export default function Payment() {
             <label className="block text-sm font-medium">End Date</label>
             <DatePicker 
               selected={endDate} 
-              onChange={date => setEndDate(date)} 
+              onChange={setEndDate} 
               className="border p-2 rounded w-full" 
               placeholderText="Select end date"
             />
           </div>
         </div>
 
+        {/* Financial Summary Dashboard */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <SummaryCard 
+            title="Today's Sales" 
+            value={financialSummary.todaySales} 
+            color="border-green-500" 
+          />
+          <SummaryCard 
+            title="Monthly Sales" 
+            value={financialSummary.monthlySales} 
+            color="border-blue-500" 
+          />
+          <SummaryCard 
+            title="Inventory Value" 
+            value={financialSummary.inventoryValue} 
+            color="border-purple-500" 
+          />
+          <SummaryCard 
+            title="Estimated Profit" 
+            value={financialSummary.profit} 
+            color="border-yellow-500" 
+          />
+        </div>
+
         {/* Customers Section */}
-        <DataSection
-          title="Customers"
-          data={customers}
-          searchValue={customerSearch}
-          onSearchChange={setCustomerSearch}
-          searchKey="name"
-          onAddNew={() => setShowCustomerForm(true)}
-          csvFileName="customers.csv"
-          renderItem={customer => (
-            <div key={customer.id} className="border p-3 rounded hover:bg-gray-50">
-              <h3 className="font-bold">{customer.name}</h3>
-              <p className="text-gray-600">{customer.phone}</p>
-              {customer.email && <p className="text-gray-600">{customer.email}</p>}
-            </div>
-          )}
-        />
+        <div className="bg-white rounded shadow p-4 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Customers</h2>
+            <button
+              onClick={() => setShowCustomerForm(true)}
+              className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
+            >
+              + New Customer
+            </button>
+          </div>
+          <input
+            type="text"
+            placeholder="Search customers..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="border p-2 rounded w-full mb-3"
+          />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {customers
+              .filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
+              .map(customer => (
+                <div key={customer.id} className="border p-3 rounded hover:bg-gray-50">
+                  <h3 className="font-bold">{customer.name}</h3>
+                  <p className="text-gray-600">{customer.phone}</p>
+                  {customer.email && <p className="text-gray-600">{customer.email}</p>}
+                </div>
+              ))}
+          </div>
+        </div>
 
         {/* Suppliers Section */}
-        <DataSection
-          title="Suppliers"
-          data={suppliers}
-          searchValue={supplierSearch}
-          onSearchChange={setSupplierSearch}
-          searchKey="name"
-          onAddNew={() => setShowSupplierForm(true)}
-          csvFileName="suppliers.csv"
-          renderItem={supplier => (
-            <div key={supplier.id} className="border p-3 rounded hover:bg-gray-50">
-              <h3 className="font-bold">{supplier.name}</h3>
-              <p className="text-gray-600">{supplier.phone}</p>
-              {supplier.contact_person && (
-                <p className="text-gray-600">Contact: {supplier.contact_person}</p>
-              )}
-            </div>
-          )}
-        />
+        <div className="bg-white rounded shadow p-4 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Suppliers</h2>
+            <button
+              onClick={() => setShowSupplierForm(true)}
+              className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
+            >
+              + New Supplier
+            </button>
+          </div>
+          <input
+            type="text"
+            placeholder="Search suppliers..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="border p-2 rounded w-full mb-3"
+          />
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {suppliers
+              .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
+              .map(supplier => (
+                <div key={supplier.id} className="border p-3 rounded hover:bg-gray-50">
+                  <h3 className="font-bold">{supplier.name}</h3>
+                  <p className="text-gray-600">{supplier.phone}</p>
+                  {supplier.contact_person && (
+                    <p className="text-gray-600">Contact: {supplier.contact_person}</p>
+                  )}
+                </div>
+              ))}
+          </div>
+        </div>
 
         {/* Sales Section */}
-        <DataSection
-          title="Sales"
-          data={sales}
-          searchValue={productSearch}
-          onSearchChange={setProductSearch}
-          searchKey="inventory.name"
-          onAddNew={() => setShowSaleForm(true)}
-          csvFileName="sales.csv"
-          renderItem={sale => (
-            <div key={sale.id} className="border p-3 rounded hover:bg-gray-50">
-              <div className="flex justify-between">
-                <div>
-                  <h3 className="font-bold">{sale.inventory?.name}</h3>
-                  <p className="text-gray-600">Sold to: {sale.customers?.name || 'Unknown'}</p>
+        <div className="bg-white rounded shadow p-4 mb-6">
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold">Recent Sales</h2>
+            <button
+              onClick={() => setShowSaleForm(true)}
+              className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
+            >
+              + New Sale
+            </button>
+          </div>
+          <div className="space-y-3">
+            {sales.map(sale => (
+              <div key={sale.id} className="border p-3 rounded hover:bg-gray-50">
+                <div className="flex justify-between">
+                  <div>
+                    <h3 className="font-bold">{sale.inventory?.name}</h3>
+                    <p className="text-gray-600">Sold to: {sale.customers?.name || 'Unknown'}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-bold">KSh {(sale.price * sale.quantity).toLocaleString()}</p>
+                    <p className="text-gray-600">
+                      {sale.quantity} × KSh {sale.price?.toLocaleString()}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-right">
-                  <p className="font-bold">KSh {(sale.price * sale.quantity).toLocaleString()}</p>
-                  <p className="text-gray-600">
-                    {sale.quantity} × KSh {sale.price?.toLocaleString()}
-                  </p>
-                </div>
+                <p className="text-sm text-gray-500 mt-1">
+                  {new Date(sale.created_at).toLocaleString()} • {sale.payment_method}
+                </p>
               </div>
-              <p className="text-sm text-gray-500 mt-1">
-                {new Date(sale.created_at).toLocaleString()} • {sale.payment_method}
-              </p>
-              {sale.notes && <p className="text-sm mt-1">Notes: {sale.notes}</p>}
-            </div>
-          )}
-        />
+            ))}
+          </div>
+        </div>
 
         {/* Customer Form Modal */}
         {showCustomerForm && (
@@ -352,7 +388,6 @@ export default function Payment() {
                     className="w-full border border-gray-300 rounded px-3 py-2"
                     value={newCustomer.name}
                     onChange={(e) => setNewCustomer({...newCustomer, name: e.target.value})}
-                    placeholder="John Doe"
                     required
                   />
                 </div>
@@ -363,7 +398,6 @@ export default function Payment() {
                     className="w-full border border-gray-300 rounded px-3 py-2"
                     value={newCustomer.phone}
                     onChange={(e) => setNewCustomer({...newCustomer, phone: e.target.value})}
-                    placeholder="0712345678"
                     required
                   />
                 </div>
@@ -374,7 +408,6 @@ export default function Payment() {
                     className="w-full border border-gray-300 rounded px-3 py-2"
                     value={newCustomer.email}
                     onChange={(e) => setNewCustomer({...newCustomer, email: e.target.value})}
-                    placeholder="customer@example.com"
                   />
                 </div>
                 <div>
@@ -383,8 +416,6 @@ export default function Payment() {
                     className="w-full border border-gray-300 rounded px-3 py-2"
                     value={newCustomer.address}
                     onChange={(e) => setNewCustomer({...newCustomer, address: e.target.value})}
-                    placeholder="Physical address"
-                    rows={3}
                   />
                 </div>
               </div>
@@ -419,7 +450,6 @@ export default function Payment() {
                     className="w-full border border-gray-300 rounded px-3 py-2"
                     value={newSupplier.name}
                     onChange={(e) => setNewSupplier({...newSupplier, name: e.target.value})}
-                    placeholder="ABC Meat Suppliers"
                     required
                   />
                 </div>
@@ -430,7 +460,6 @@ export default function Payment() {
                     className="w-full border border-gray-300 rounded px-3 py-2"
                     value={newSupplier.contact_person}
                     onChange={(e) => setNewSupplier({...newSupplier, contact_person: e.target.value})}
-                    placeholder="Jane Smith"
                   />
                 </div>
                 <div>
@@ -440,7 +469,6 @@ export default function Payment() {
                     className="w-full border border-gray-300 rounded px-3 py-2"
                     value={newSupplier.phone}
                     onChange={(e) => setNewSupplier({...newSupplier, phone: e.target.value})}
-                    placeholder="0723456789"
                     required
                   />
                 </div>
@@ -451,7 +479,6 @@ export default function Payment() {
                     className="w-full border border-gray-300 rounded px-3 py-2"
                     value={newSupplier.email}
                     onChange={(e) => setNewSupplier({...newSupplier, email: e.target.value})}
-                    placeholder="supplier@example.com"
                   />
                 </div>
                 <div>
@@ -460,8 +487,6 @@ export default function Payment() {
                     className="w-full border border-gray-300 rounded px-3 py-2"
                     value={newSupplier.address}
                     onChange={(e) => setNewSupplier({...newSupplier, address: e.target.value})}
-                    placeholder="Business address"
-                    rows={3}
                   />
                 </div>
               </div>

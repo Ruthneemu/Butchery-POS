@@ -559,12 +559,7 @@ const Inventory = () => {
           <div className="flex flex-wrap gap-2 w-full sm:w-auto">
             {!stockTakeMode ? (
               <>
-                <button
-                  onClick={() => setShowBulkImport(!showBulkImport)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-                >
-                  {showBulkImport ? 'Cancel Bulk Import' : 'Bulk Import'}
-                </button>
+              
                 <CSVLink 
                   data={csvData} 
                   filename="inventory_export.csv"
