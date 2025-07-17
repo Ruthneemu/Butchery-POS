@@ -1,78 +1,44 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Layout from "../components/layout";
 import supabase from '../supabaseClient';
-import { CSVLink } from 'react-csv';
 import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 
 export default function Payment() {
   // Data states
   const [customers, setCustomers] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);
-  const [products, setProducts] = useState([]);
-  const [sales, setSales] = useState([]);
+  const [products, setProducts] = useState([]); // We need products for selection
   const [financialSummary, setFinancialSummary] = useState({
-    todaySales: 0,
-    monthlySales: 0,
     inventoryValue: 0,
-    profit: 0
   });
 
-  // Form visibility states
-  const [showCustomerForm, setShowCustomerForm] = useState(false);
-  const [showSupplierForm, setShowSupplierForm] = useState(false);
-  const [showSaleForm, setShowSaleForm] = useState(false);
+  // Transaction-related states
+  const [transactionItems, setTransactionItems] = useState([]);
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [itemQuantity, setItemQuantity] = useState(1);
+  const [customerSearchTerm, setCustomerSearchTerm] = useState('');
+  const [selectedCustomerId, setSelectedCustomerId] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cash');
+  const [cashReceived, setCashReceived] = useState(0);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
-  // Form data states
-  const [newCustomer, setNewCustomer] = useState({
-    name: '',
-    phone: '',
-    email: '',
-    address: ''
-  });
-  
-  const [newSupplier, setNewSupplier] = useState({
-    name: '',
-    contact_person: '',
-    phone: '',
-    email: '',
-    address: ''
-  });
-
-  const [newSale, setNewSale] = useState({
-    customer_id: '',
-    product_id: '',
-    quantity: 1,
-    price: 0,
-    payment_method: 'cash',
-    notes: ''
-  });
-
-  // Filter states
-  const [searchTerm, setSearchTerm] = useState('');
+  // Filter states (kept for consistency, though less relevant for immediate payment)
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
 
-  // Fetch all data
+  // Fetch initial data
   useEffect(() => {
     const fetchData = async () => {
       await fetchCustomers();
-      await fetchSuppliers();
-      await fetchProducts();
-      await fetchSales();
+      await fetchProducts(); // Fetch products to populate the selection
       await fetchFinancialSummary();
     };
     fetchData();
-  }, [startDate, endDate]);
+  }, []);
 
   const fetchCustomers = async () => {
     const { data } = await supabase.from('customers').select('*');
     if (data) setCustomers(data);
-  };
-
-  const fetchSuppliers = async () => {
-    const { data } = await supabase.from('suppliers').select('*');
-    if (data) setSuppliers(data);
   };
 
   const fetchProducts = async () => {
@@ -80,145 +46,110 @@ export default function Payment() {
     if (data) setProducts(data);
   };
 
-  const fetchSales = async () => {
-    let query = supabase.from('sales').select(`
-      *,
-      customers(name),
-      inventory(name)
-    `);
-    if (startDate) query = query.gte('created_at', startDate.toISOString());
-    if (endDate) query = query.lte('created_at', endDate.toISOString());
-    query = query.order('created_at', { ascending: false });
-    const { data } = await query;
-    if (data) setSales(data);
-  };
-
   const fetchFinancialSummary = async () => {
-    // Today's sales
-    const today = new Date().toISOString().split('T')[0];
-    const { data: todaySales } = await supabase
-      .from('sales')
-      .select('total')
-      .gte('created_at', today);
-
-    // Monthly sales
-    const firstDayOfMonth = new Date();
-    firstDayOfMonth.setDate(1);
-    const { data: monthlySales } = await supabase
-      .from('sales')
-      .select('total')
-      .gte('created_at', firstDayOfMonth.toISOString());
-
-    // Inventory value
     const { data: inventory } = await supabase
       .from('inventory')
       .select('quantity, selling_price');
-
-    // Calculate values
-    const todayTotal = todaySales?.reduce((sum, s) => sum + s.total, 0) || 0;
-    const monthTotal = monthlySales?.reduce((sum, s) => sum + s.total, 0) || 0;
     const inventoryValue = inventory?.reduce((sum, i) => sum + (i.quantity * i.selling_price), 0) || 0;
-    const profit = monthTotal * 0.3; // Assuming 30% profit margin
-
-    setFinancialSummary({
-      todaySales: todayTotal,
-      monthlySales: monthTotal,
-      inventoryValue,
-      profit
-    });
+    setFinancialSummary({ inventoryValue });
   };
 
-  // Form handlers
-  const handleAddCustomer = async () => {
-    if (!newCustomer.name || !newCustomer.phone) {
-      alert('Please fill in name and phone number');
-      return;
-    }
+  // --- Product Selection & Quantity Handlers ---
+  const handleAddItemToTransaction = () => {
+    const product = products.find(p => p.id === selectedProductId);
+    if (product && itemQuantity > 0) {
+      const existingItemIndex = transactionItems.findIndex(item => item.product_id === selectedProductId);
 
-    const { error } = await supabase
-      .from('customers')
-      .insert([newCustomer]);
-
-    if (error) {
-      alert('Error adding customer: ' + error.message);
-    } else {
-      setShowCustomerForm(false);
-      setNewCustomer({ name: '', phone: '', email: '', address: '' });
-      fetchCustomers();
-    }
-  };
-
-  const handleAddSupplier = async () => {
-    if (!newSupplier.name || !newSupplier.phone) {
-      alert('Please fill in business name and phone number');
-      return;
-    }
-
-    const { error } = await supabase
-      .from('suppliers')
-      .insert([newSupplier]);
-
-    if (error) {
-      alert('Error adding supplier: ' + error.message);
-    } else {
-      setShowSupplierForm(false);
-      setNewSupplier({ name: '', contact_person: '', phone: '', email: '', address: '' });
-      fetchSuppliers();
-    }
-  };
-
-  const handleAddSale = async () => {
-    if (!newSale.customer_id || !newSale.product_id || !newSale.quantity) {
-      alert('Please select customer, product and quantity');
-      return;
-    }
-
-    const selectedProduct = products.find(p => p.id === newSale.product_id);
-    const salePrice = newSale.price || selectedProduct.selling_price;
-
-    const { error } = await supabase
-      .from('sales')
-      .insert([{
-        customer_id: newSale.customer_id,
-        product_id: newSale.product_id,
-        quantity: newSale.quantity,
-        price: salePrice,
-        total: salePrice * newSale.quantity,
-        payment_method: newSale.payment_method,
-        notes: newSale.notes,
-        cost_price: selectedProduct.price // For profit calculation
-      }]);
-
-    if (error) {
-      alert('Error recording sale: ' + error.message);
-    } else {
-      setShowSaleForm(false);
-      setNewSale({
-        customer_id: '',
-        product_id: '',
-        quantity: 1,
-        price: 0,
-        payment_method: 'cash',
-        notes: ''
-      });
-      fetchSales();
-      fetchProducts();
-      fetchFinancialSummary();
-    }
-  };
-
-  // Update sale price when product changes
-  useEffect(() => {
-    if (newSale.product_id) {
-      const selectedProduct = products.find(p => p.id === newSale.product_id);
-      if (selectedProduct) {
-        setNewSale(prev => ({
-          ...prev,
-          price: selectedProduct.selling_price
-        }));
+      if (existingItemIndex > -1) {
+        // Update existing item quantity
+        const updatedItems = [...transactionItems];
+        updatedItems[existingItemIndex].quantity += parseFloat(itemQuantity);
+        updatedItems[existingItemIndex].total = updatedItems[existingItemIndex].quantity * updatedItems[existingItemIndex].price;
+        setTransactionItems(updatedItems);
+      } else {
+        // Add new item
+        setTransactionItems([
+          ...transactionItems,
+          {
+            product_id: product.id,
+            name: product.name,
+            quantity: parseFloat(itemQuantity),
+            price: product.selling_price,
+            total: parseFloat(itemQuantity) * product.selling_price,
+            cost_price: product.cost_price // For potential profit tracking later
+          }
+        ]);
       }
+      setSelectedProductId('');
+      setItemQuantity(1);
+    } else {
+      alert('Please select a product and enter a valid quantity.');
     }
-  }, [newSale.product_id, products]);
+  };
+
+  const handleRemoveItem = (index) => {
+    const updatedItems = transactionItems.filter((_, i) => i !== index);
+    setTransactionItems(updatedItems);
+  };
+
+  const calculateGrandTotal = () => {
+    return transactionItems.reduce((sum, item) => sum + item.total, 0);
+  };
+
+  const calculateChange = () => {
+    const total = calculateGrandTotal();
+    return cashReceived > total ? cashReceived - total : 0;
+  };
+
+  // --- Transaction Finalization & Receipt ---
+  const handleProcessPayment = async () => {
+    const grandTotal = calculateGrandTotal();
+    if (transactionItems.length === 0) {
+      alert('Please add items to the transaction.');
+      return;
+    }
+    if (paymentMethod === 'cash' && cashReceived < grandTotal) {
+      alert('Cash received is less than the total amount.');
+      return;
+    }
+
+    // Prepare sales data for Supabase
+    const salesData = transactionItems.map(item => ({
+      customer_id: selectedCustomerId || null, // Link to customer if selected
+      product_id: item.product_id,
+      quantity: item.quantity,
+      price: item.price,
+      total: item.total,
+      payment_method: paymentMethod,
+      // You might add notes here if you reintroduce them
+      // created_at will be automatically set by Supabase
+    }));
+
+    const { error } = await supabase
+      .from('sales') // Assuming you'll reintroduce a 'sales' table for transactions
+      .insert(salesData);
+
+    if (error) {
+      alert('Error processing payment: ' + error.message);
+      console.error('Payment processing error:', error);
+    } else {
+      alert('Payment successful!');
+      // TODO: Implement receipt generation logic (print/email/SMS)
+      console.log('Transaction processed. Receipt details:', {
+        items: transactionItems,
+        total: grandTotal,
+        paymentMethod,
+        customer: selectedCustomerId ? customers.find(c => c.id === selectedCustomerId) : 'Guest',
+        change: paymentMethod === 'cash' ? calculateChange() : 0
+      });
+      // Reset transaction states
+      setTransactionItems([]);
+      setSelectedCustomerId('');
+      setPaymentMethod('cash');
+      setCashReceived(0);
+      setShowPaymentModal(false);
+    }
+  };
 
   // Reusable card component for financial summary
   const SummaryCard = ({ title, value, color }) => (
@@ -228,26 +159,35 @@ export default function Payment() {
     </div>
   );
 
+  const filteredCustomers = customerSearchTerm
+    ? customers.filter(c => c.name.toLowerCase().includes(customerSearchTerm.toLowerCase()))
+    : [];
+
+  const selectedCustomerName = selectedCustomerId
+    ? customers.find(c => c.id === selectedCustomerId)?.name
+    : 'Guest Customer';
+
+
   return (
     <Layout>
       <div className="p-4 space-y-6 max-w-screen-lg mx-auto">
-        {/* Date Filter */}
+        {/* Date Filter (less relevant for Payment but kept) */}
         <div className="flex flex-wrap gap-4 items-end bg-white shadow p-4 rounded">
           <div>
             <label className="block text-sm font-medium">Start Date</label>
-            <DatePicker 
-              selected={startDate} 
-              onChange={setStartDate} 
-              className="border p-2 rounded w-full" 
+            <DatePicker
+              selected={startDate}
+              onChange={setStartDate}
+              className="border p-2 rounded w-full"
               placeholderText="Select start date"
             />
           </div>
           <div>
             <label className="block text-sm font-medium">End Date</label>
-            <DatePicker 
-              selected={endDate} 
-              onChange={setEndDate} 
-              className="border p-2 rounded w-full" 
+            <DatePicker
+              selected={endDate}
+              onChange={setEndDate}
+              className="border p-2 rounded w-full"
               placeholderText="Select end date"
             />
           </div>
@@ -255,371 +195,265 @@ export default function Payment() {
 
         {/* Financial Summary Dashboard */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <SummaryCard 
-            title="Today's Sales" 
-            value={financialSummary.todaySales} 
-            color="border-green-500" 
-          />
-          <SummaryCard 
-            title="Monthly Sales" 
-            value={financialSummary.monthlySales} 
-            color="border-blue-500" 
-          />
-          <SummaryCard 
-            title="Inventory Value" 
-            value={financialSummary.inventoryValue} 
-            color="border-purple-500" 
-          />
-          <SummaryCard 
-            title="Estimated Profit" 
-            value={financialSummary.profit} 
-            color="border-yellow-500" 
+          <SummaryCard
+            title="Inventory Value"
+            value={financialSummary.inventoryValue}
+            color="border-purple-500"
           />
         </div>
 
-        {/* Customers Section */}
+        {/* --- Transaction Section --- */}
         <div className="bg-white rounded shadow p-4 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Customers</h2>
+          <h2 className="text-xl font-semibold mb-4">New Transaction</h2>
+
+          {/* Customer Linking */}
+          <div className="mb-4">
+            <label className="block text-sm font-medium mb-1">Link Customer:</label>
+            <input
+              type="text"
+              placeholder="Search or select customer..."
+              value={customerSearchTerm}
+              onChange={(e) => {
+                setCustomerSearchTerm(e.target.value);
+                setSelectedCustomerId(''); // Deselect if typing
+              }}
+              className="border p-2 rounded w-full mb-2"
+            />
+            {customerSearchTerm && filteredCustomers.length > 0 && (
+              <div className="border border-gray-300 rounded max-h-40 overflow-y-auto bg-white absolute z-10 w-auto md:w-[calc(50%-1rem)] lg:w-[calc(25%-1rem)]"> {/* Adjust width as needed */}
+                {filteredCustomers.map(customer => (
+                  <div
+                    key={customer.id}
+                    className="p-2 cursor-pointer hover:bg-gray-100"
+                    onClick={() => {
+                      setSelectedCustomerId(customer.id);
+                      setCustomerSearchTerm(customer.name); // Display full name in input
+                    }}
+                  >
+                    {customer.name} ({customer.phone})
+                  </div>
+                ))}
+              </div>
+            )}
             <button
-              onClick={() => setShowCustomerForm(true)}
-              className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
+              onClick={() => {
+                setSelectedCustomerId('');
+                setCustomerSearchTerm('Guest Customer');
+              }}
+              className="bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm mt-2"
             >
-              + New Customer
+              Set as Guest
             </button>
+            <p className="mt-2 text-sm text-gray-600">Selected: <span className="font-medium">{selectedCustomerName}</span></p>
           </div>
-          <input
-            type="text"
-            placeholder="Search customers..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="border p-2 rounded w-full mb-3"
-          />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {customers
-              .filter(c => c.name.toLowerCase().includes(searchTerm.toLowerCase()))
-              .map(customer => (
-                <div key={customer.id} className="border p-3 rounded hover:bg-gray-50">
-                  <h3 className="font-bold">{customer.name}</h3>
-                  <p className="text-gray-600">{customer.phone}</p>
-                  {customer.email && <p className="text-gray-600">{customer.email}</p>}
-                </div>
+
+          {/* Product Selection */}
+          <div className="flex gap-2 mb-4">
+            <select
+              value={selectedProductId}
+              onChange={(e) => setSelectedProductId(e.target.value)}
+              className="border p-2 rounded flex-grow"
+            >
+              <option value="">Select Product</option>
+              {products.map(product => (
+                <option key={product.id} value={product.id}>
+                  {product.name} (KSh {product.selling_price?.toLocaleString()})
+                </option>
               ))}
-          </div>
-        </div>
-
-        {/* Suppliers Section */}
-        <div className="bg-white rounded shadow p-4 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Suppliers</h2>
+            </select>
+            <input
+              type="number"
+              min="0.01"
+              step="0.01"
+              value={itemQuantity}
+              onChange={(e) => setItemQuantity(parseFloat(e.target.value))}
+              placeholder="Quantity"
+              className="border p-2 rounded w-24"
+            />
             <button
-              onClick={() => setShowSupplierForm(true)}
-              className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
+              onClick={handleAddItemToTransaction}
+              className="bg-green-600 text-white px-4 py-2 rounded"
             >
-              + New Supplier
+              Add Item
             </button>
           </div>
-          <input
-            type="text"
-            placeholder="Search suppliers..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="border p-2 rounded w-full mb-3"
-          />
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {suppliers
-              .filter(s => s.name.toLowerCase().includes(searchTerm.toLowerCase()))
-              .map(supplier => (
-                <div key={supplier.id} className="border p-3 rounded hover:bg-gray-50">
-                  <h3 className="font-bold">{supplier.name}</h3>
-                  <p className="text-gray-600">{supplier.phone}</p>
-                  {supplier.contact_person && (
-                    <p className="text-gray-600">Contact: {supplier.contact_person}</p>
-                  )}
-                </div>
-              ))}
+
+          {/* Transaction Items Display */}
+          <div className="border rounded p-3 mb-4 max-h-60 overflow-y-auto">
+            <h3 className="font-semibold mb-2">Items in Cart:</h3>
+            {transactionItems.length === 0 ? (
+              <p className="text-gray-500">No items added yet.</p>
+            ) : (
+              <ul>
+                {transactionItems.map((item, index) => (
+                  <li key={index} className="flex justify-between items-center py-2 border-b last:border-b-0">
+                    <div>
+                      <p className="font-medium">{item.name}</p>
+                      <p className="text-sm text-gray-600">{item.quantity} x KSh {item.price?.toLocaleString()}</p>
+                    </div>
+                    <div className="flex items-center">
+                      <p className="font-bold mr-3">KSh {item.total?.toLocaleString()}</p>
+                      <button
+                        onClick={() => handleRemoveItem(index)}
+                        className="text-red-600 hover:text-red-800 text-lg"
+                      >
+                        &times;
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
+
+          {/* Transaction Summary */}
+          <div className="text-right text-2xl font-bold mb-4">
+            Grand Total: KSh {calculateGrandTotal().toLocaleString()}
+          </div>
+
+          {/* Payment Button */}
+          <button
+            onClick={() => setShowPaymentModal(true)}
+            className="bg-blue-600 text-white w-full py-3 rounded text-lg font-semibold"
+            disabled={transactionItems.length === 0}
+          >
+            Proceed to Payment
+          </button>
         </div>
 
-        {/* Sales Section */}
-        <div className="bg-white rounded shadow p-4 mb-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold">Recent Sales</h2>
-            <button
-              onClick={() => setShowSaleForm(true)}
-              className="bg-blue-600 text-white px-3 py-1 rounded text-sm"
-            >
-              + New Sale
-            </button>
-          </div>
-          <div className="space-y-3">
-            {sales.map(sale => (
-              <div key={sale.id} className="border p-3 rounded hover:bg-gray-50">
-                <div className="flex justify-between">
-                  <div>
-                    <h3 className="font-bold">{sale.inventory?.name}</h3>
-                    <p className="text-gray-600">Sold to: {sale.customers?.name || 'Unknown'}</p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-bold">KSh {(sale.price * sale.quantity).toLocaleString()}</p>
-                    <p className="text-gray-600">
-                      {sale.quantity} × KSh {sale.price?.toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-                <p className="text-sm text-gray-500 mt-1">
-                  {new Date(sale.created_at).toLocaleString()} • {sale.payment_method}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Customer Form Modal */}
-        {showCustomerForm && (
+        {/* --- Payment Modal --- */}
+        {showPaymentModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg p-6 w-full max-w-md">
-              <h2 className="text-xl font-semibold mb-4">Add New Customer</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block mb-1 font-medium">Full Name*</label>
-                  <input
-                    type="text"
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newCustomer.name}
-                    onChange={(e) => setNewCustomer({...newCustomer, name: e.target.value})}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Phone Number*</label>
-                  <input
-                    type="tel"
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newCustomer.phone}
-                    onChange={(e) => setNewCustomer({...newCustomer, phone: e.target.value})}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Email</label>
-                  <input
-                    type="email"
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newCustomer.email}
-                    onChange={(e) => setNewCustomer({...newCustomer, email: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Address</label>
-                  <textarea
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newCustomer.address}
-                    onChange={(e) => setNewCustomer({...newCustomer, address: e.target.value})}
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end space-x-2 mt-4">
-                <button
-                  onClick={() => setShowCustomerForm(false)}
-                  className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAddCustomer}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
-                >
-                  Save Customer
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+              <h2 className="text-xl font-semibold mb-4">Complete Payment</h2>
+              <p className="text-lg font-bold mb-4">Amount Due: KSh {calculateGrandTotal().toLocaleString()}</p>
+              <p className="text-md text-gray-700 mb-4">Paying for: {selectedCustomerName}</p>
 
-        {/* Supplier Form Modal */}
-        {showSupplierForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md">
-              <h2 className="text-xl font-semibold mb-4">Add New Supplier</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block mb-1 font-medium">Business Name*</label>
-                  <input
-                    type="text"
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newSupplier.name}
-                    onChange={(e) => setNewSupplier({...newSupplier, name: e.target.value})}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Contact Person</label>
-                  <input
-                    type="text"
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newSupplier.contact_person}
-                    onChange={(e) => setNewSupplier({...newSupplier, contact_person: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Phone Number*</label>
-                  <input
-                    type="tel"
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newSupplier.phone}
-                    onChange={(e) => setNewSupplier({...newSupplier, phone: e.target.value})}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Email</label>
-                  <input
-                    type="email"
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newSupplier.email}
-                    onChange={(e) => setNewSupplier({...newSupplier, email: e.target.value})}
-                  />
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Address</label>
-                  <textarea
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newSupplier.address}
-                    onChange={(e) => setNewSupplier({...newSupplier, address: e.target.value})}
-                  />
-                </div>
-              </div>
-              <div className="flex justify-end space-x-2 mt-4">
-                <button
-                  onClick={() => setShowSupplierForm(false)}
-                  className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
+              {/* Payment Method Selection */}
+              <div className="mb-4">
+                <label className="block mb-2 font-medium">Select Payment Method:</label>
+                <select
+                  value={paymentMethod}
+                  onChange={(e) => {
+                    setPaymentMethod(e.target.value);
+                    setCashReceived(0); // Reset cash received if method changes
+                  }}
+                  className="w-full border border-gray-300 rounded px-3 py-2"
                 >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleAddSupplier}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
-                >
-                  Save Supplier
-                </button>
+                  <option value="cash">Cash</option>
+                  <option value="mpesa">M-Pesa</option>
+                  <option value="card">Card Payment</option>
+                  <option value="bank">Bank Transfer/Mobile Banking</option>
+                  <option value="credit">Credit/Account Sale</option>
+                </select>
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* Sale Form Modal */}
-        {showSaleForm && (
-          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md">
-              <h2 className="text-xl font-semibold mb-4">Record New Sale</h2>
-              <div className="space-y-4">
-                <div>
-                  <label className="block mb-1 font-medium">Customer*</label>
-                  <select
+              {paymentMethod === 'cash' && (
+                <div className="mb-4">
+                  <label className="block mb-1 font-medium">Cash Received (KSh):</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={cashReceived}
+                    onChange={(e) => setCashReceived(parseFloat(e.target.value))}
                     className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newSale.customer_id}
-                    onChange={(e) => setNewSale({...newSale, customer_id: e.target.value})}
-                    required
-                  >
-                    <option value="">Select Customer</option>
-                    {customers.map(customer => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.name} ({customer.phone})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Product*</label>
-                  <select
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newSale.product_id}
-                    onChange={(e) => setNewSale({...newSale, product_id: e.target.value})}
-                    required
-                  >
-                    <option value="">Select Product</option>
-                    {products.map(product => (
-                      <option key={product.id} value={product.id}>
-                        {product.name} (KSh {product.selling_price?.toLocaleString()})
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block mb-1 font-medium">Quantity*</label>
-                    <input
-                      type="number"
-                      min="1"
-                      step="0.01"
-                      className="w-full border border-gray-300 rounded px-3 py-2"
-                      value={newSale.quantity}
-                      onChange={(e) => setNewSale({...newSale, quantity: e.target.value})}
-                      required
-                    />
-                  </div>
-                  <div>
-                    <label className="block mb-1 font-medium">Price (KSh)*</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="0.01"
-                      className="w-full border border-gray-300 rounded px-3 py-2"
-                      value={newSale.price}
-                      onChange={(e) => setNewSale({...newSale, price: e.target.value})}
-                      required
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Payment Method</label>
-                  <select
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newSale.payment_method}
-                    onChange={(e) => setNewSale({...newSale, payment_method: e.target.value})}
-                  >
-                    <option value="cash">Cash</option>
-                    <option value="mpesa">M-Pesa</option>
-                    <option value="card">Credit Card</option>
-                    <option value="bank">Bank Transfer</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block mb-1 font-medium">Notes</label>
-                  <textarea
-                    className="w-full border border-gray-300 rounded px-3 py-2"
-                    value={newSale.notes}
-                    onChange={(e) => setNewSale({...newSale, notes: e.target.value})}
-                    placeholder="Any special instructions"
-                    rows={2}
+                    placeholder="Enter amount received"
                   />
-                </div>
-                <div className="bg-gray-100 p-3 rounded">
-                  <p className="font-medium">Total: KSh 
-                    <span className="text-lg ml-1">
-                      {(newSale.price * newSale.quantity).toLocaleString()}
-                    </span>
+                  <p className="mt-2 text-green-600 font-semibold">
+                    Change Due: KSh {calculateChange().toLocaleString()}
                   </p>
                 </div>
+              )}
+
+              {paymentMethod === 'mpesa' && (
+                <div className="mb-4 bg-yellow-50 p-3 rounded">
+                  <p className="font-medium">M-Pesa Payment Instructions:</p>
+                  <p className="text-sm">Please provide your M-Pesa Till/Paybill number.</p>
+                  {/* You would integrate actual M-Pesa API calls here */}
+                  <p className="text-sm text-gray-700 mt-2">
+                    **Note**: Real integration would involve
+                    <a href="https://developer.safaricom.co.ke/docs" target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
+                      Safaricom Daraja API
+                    </a>
+                    to generate STK push or confirm transactions.
+                  </p>
+                </div>
+              )}
+
+              {paymentMethod === 'card' && (
+                <div className="mb-4 bg-blue-50 p-3 rounded">
+                  <p className="font-medium">Card Payment:</p>
+                  <p className="text-sm">Prompt customer to swipe/tap card on reader.</p>
+                  <p className="text-sm text-gray-700 mt-2">
+                    **Note**: Requires integration with a physical card reader and payment gateway.
+                  </p>
+                </div>
+              )}
+
+              {paymentMethod === 'bank' && (
+                <div className="mb-4 bg-purple-50 p-3 rounded">
+                  <p className="font-medium">Bank Transfer / Mobile Banking:</p>
+                  <p className="text-sm">Provide bank details or business mobile number for transfer.</p>
+                  <p className="text-sm text-gray-700 mt-2">
+                    **Note**: This is typically for larger or pre-arranged payments and may require manual confirmation.
+                  </p>
+                </div>
+              )}
+
+              {paymentMethod === 'credit' && (
+                <div className="mb-4 bg-orange-50 p-3 rounded">
+                  <p className="font-medium">Credit / Account Sale:</p>
+                  <p className="text-sm">This transaction will be recorded as an outstanding balance for the selected customer.</p>
+                  {!selectedCustomerId && (
+                    <p className="text-red-500 text-sm mt-1">
+                      **Warning**: Please select a specific customer for a credit sale.
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Receipt Options (Placeholder) */}
+              <div className="mb-4">
+                <label className="block mb-2 font-medium">Receipt Options:</label>
+                <div className="flex items-center space-x-4">
+                  <label className="inline-flex items-center">
+                    <input type="radio" name="receiptOption" value="print" className="form-radio" defaultChecked />
+                    <span className="ml-2">Print Receipt</span>
+                  </label>
+                  <label className="inline-flex items-center">
+                    <input type="radio" name="receiptOption" value="email" className="form-radio" />
+                    <span className="ml-2">Email/SMS</span>
+                  </label>
+                  <label className="inline-flex items-center">
+                    <input type="radio" name="receiptOption" value="none" className="form-radio" />
+                    <span className="ml-2">No Receipt</span>
+                  </label>
+                </div>
+                <p className="text-sm text-gray-500 mt-2">
+                  **Note**: Actual print/email/SMS functionality requires further integration.
+                </p>
               </div>
+
               <div className="flex justify-end space-x-2 mt-4">
                 <button
-                  onClick={() => setShowSaleForm(false)}
+                  onClick={() => setShowPaymentModal(false)}
                   className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={handleAddSale}
+                  onClick={handleProcessPayment}
                   className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
+                  disabled={paymentMethod === 'cash' && cashReceived < calculateGrandTotal()}
                 >
-                  Record Sale
+                  Confirm Payment
                 </button>
               </div>
             </div>
           </div>
         )}
+
       </div>
     </Layout>
   );

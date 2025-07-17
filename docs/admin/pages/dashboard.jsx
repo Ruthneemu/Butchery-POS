@@ -163,14 +163,6 @@ const Dashboard = () => {
         </table>
       </div>
 
-      {/* Help Section */}
-      <div className="bg-gray-100 text-gray-700 p-4 rounded shadow text-sm sm:text-base">
-        <h3 className="font-bold mb-1">💡 Need Help?</h3>
-        <p>
-          📞 Call: <a href="tel:+254712345678" className="underline">+254 712 345 678</a><br />
-          📄 Guide: <Link to="/help" className="underline">How to add a new product</Link>
-        </p>
-      </div>
     </Layout>
   );
 };
