@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import supabase from '../supabaseClient';
 import { FaEye, FaEyeSlash } from 'react-icons/fa'; // For password visibility
-import { LuLoader2 } from 'react-icons/lu'; // For spinner icon
+import { LuLoader } from 'react-icons/lu'; // For spinner icon
 
 export default function Register() {
   const navigate = useNavigate();
@@ -192,7 +192,7 @@ export default function Register() {
           className="w-full bg-blue-600 hover:bg-blue-700 transition-colors text-white py-3 rounded-lg font-semibold flex items-center justify-center gap-2 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
           aria-live="polite" // Announce changes to screen readers when disabled state changes
         >
-          {loading && <LuLoader2 className="animate-spin" />} {/* Spinner icon */}
+          {loading && <LuLoader className="animate-spin" />} {/* Spinner icon */}
           {loading ? 'Registering...' : 'Register'}
         </button>
 
