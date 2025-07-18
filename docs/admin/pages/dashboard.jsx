@@ -97,60 +97,68 @@ const Dashboard = () => {
 
   // --- Data Fetching Functions ---
 
-  const fetchSummaryData = useCallback(async () => {
-    setLoading(prev => ({ ...prev, summary: true }));
-    setError(prev => ({ ...prev, summary: null }));
-    try {
-      const { data: products, error: productError } = await supabase
-        .from("inventory")
-        .select("id, quantity, expiry_date");
-      // Note: `setHours(0,0,0,0)` on a new Date object correctly sets it to the start of today
-      const { data: sales, error: salesError } = await supabase
-        .from("sales")
-        .select("total, created_at")
-        .gte('created_at', new Date().setHours(0,0,0,0).toISOString());
 
-      if (productError || salesError) {
-        throw productError || salesError;
-      }
+const fetchSummaryData = useCallback(async () => {
+  setLoading(prev => ({ ...prev, summary: true }));
+  setError(prev => ({ ...prev, summary: null }));
+  try {
+    const { data: products, error: productError } = await supabase
+      .from("inventory")
+      .select("id, quantity, expiry_date");
 
-      const now = new Date();
-      now.setHours(0,0,0,0); // Start of today for consistent expiry calculation
+    // FIX START: Correctly get the start of today's date in ISO format for the sales query
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0); // Modifies the 'startOfToday' Date object in place
+    // FIX END
 
-      const lowStockCount = products.filter((p) => p.quantity < LOW_STOCK_THRESHOLD).length;
-      const expiringSoonCount = products.filter((p) => {
-        if (!p.expiry_date) return false;
-        const expiry = new Date(p.expiry_date);
-        const thresholdDate = new Date(now);
-        thresholdDate.setDate(now.getDate() + EXPIRY_DAYS_THRESHOLD);
-        return expiry <= thresholdDate;
-      }).length;
+    const { data: sales, error: salesError } = await supabase
+      .from("sales")
+      .select("total, created_at")
+      // Use the correctly formatted ISO string from the Date object
+      .gte('created_at', startOfToday.toISOString());
 
-      const totalSalesToday = sales.reduce((acc, s) => acc + s.total, 0);
-
-      setSummary({
-        totalProducts: products.length,
-        totalSalesToday: formatCurrency(totalSalesToday),
-        lowStock: lowStockCount,
-        expiringSoon: expiringSoonCount,
-      });
-
-      // Cache raw value for totalSalesToday for proper re-formatting on load
-      localStorage.setItem("dashboardSummaryCache", JSON.stringify({
-        totalProducts: products.length,
-        totalSalesToday: totalSalesToday, // Store raw value
-        lowStock: lowStockCount,
-        expiringSoon: expiringSoonCount,
-      }));
-
-    } catch (err) {
-      console.error("Error fetching summary data:", err.message);
-      setError(prev => ({ ...prev, summary: 'Failed to load summary data.' }));
-      notify('Failed to load summary data.', 'error');
-    } finally {
-      setLoading(prev => ({ ...prev, summary: false }));
+    if (productError || salesError) {
+      throw productError || salesError;
     }
-  }, [notify]); // Add notify to useCallback dependencies
+
+    // This 'now' variable is correct as it's a Date object
+    const now = new Date();
+    now.setHours(0,0,0,0); // Start of today for consistent expiry calculation
+
+    const lowStockCount = products.filter((p) => p.quantity < LOW_STOCK_THRESHOLD).length;
+    const expiringSoonCount = products.filter((p) => {
+      if (!p.expiry_date) return false;
+      const expiry = new Date(p.expiry_date);
+      const thresholdDate = new Date(now);
+      thresholdDate.setDate(now.getDate() + EXPIRY_DAYS_THRESHOLD);
+      return expiry <= thresholdDate;
+    }).length;
+
+    const totalSalesToday = sales.reduce((acc, s) => acc + s.total, 0);
+
+    setSummary({
+      totalProducts: products.length,
+      totalSalesToday: formatCurrency(totalSalesToday),
+      lowStock: lowStockCount,
+      expiringSoon: expiringSoonCount,
+    });
+
+    // Cache raw value for totalSalesToday for proper re-formatting on load
+    localStorage.setItem("dashboardSummaryCache", JSON.stringify({
+      totalProducts: products.length,
+      totalSalesToday: totalSalesToday, // Store raw value
+      lowStock: lowStockCount,
+      expiringSoon: expiringSoonCount,
+    }));
+
+  } catch (err) {
+    console.error("Error fetching summary data:", err.message);
+    setError(prev => ({ ...prev, summary: 'Failed to load summary data.' }));
+    notify('Failed to load summary data.', 'error');
+  } finally {
+    setLoading(prev => ({ ...prev, summary: false }));
+  }
+}, [notify]); // Add notify to useCallback dependencies
 
   const fetchSalesTrend = useCallback(async (range) => {
     setLoading(prev => ({ ...prev, trend: true }));
