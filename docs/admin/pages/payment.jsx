@@ -8,14 +8,15 @@ export default function Payment() {
   // Data states
   const [customers, setCustomers] = useState([]);
   const [products, setProducts] = useState([]);
-  const [sales, setSales] = useState([]); // Reintroduced sales state
+  const [sales, setSales] = useState([]);
+  const [suppliers, setSuppliers] = useState([]); // ADD THIS LINE
   const [financialSummary, setFinancialSummary] = useState({
     todaySales: 0,
     monthlySales: 0,
     inventoryValue: 0,
     profit: 0
   });
-
+  
   // Transaction-related states
   const [transactionItems, setTransactionItems] = useState([]);
   const [selectedProductId, setSelectedProductId] = useState('');
@@ -29,6 +30,13 @@ export default function Payment() {
   // Filter states
   const [startDate, setStartDate] = useState(null);
   const [endDate, setEndDate] = useState(null);
+
+  //fetch suppliers state
+  const [supplierSearchTerm, setSupplierSearchTerm] = useState(''); // ADD THIS LINE
+  const fetchSuppliers = async () => {
+    const { data } = await supabase.from('suppliers').select('*');
+    if (data) setSuppliers(data);
+};
 
   // Fetch initial data
   useEffect(() => {
@@ -404,13 +412,14 @@ export default function Payment() {
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">Suppliers</h2>
           </div>
-          <input
-            type="text"
-            placeholder="Search suppliers..."
-            value={customerSearchTerm} // Reusing for supplier search now
-            onChange={(e) => setSearchTerm(e.target.value)} // Note: search term is now mixed
-            className="border p-2 rounded w-full mb-3"
-          />
+          // In the Suppliers section
+<input
+    type="text"
+    placeholder="Search suppliers..."
+    value={supplierSearchTerm} // Now linked to the declared state
+    onChange={(e) => setSupplierSearchTerm(e.target.value)} // Now linked to the declared state setter
+    className="border p-2 rounded w-full mb-3"
+/>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Removed suppliers state and rendering as it was removed in a previous step, and the current request focuses on payment.
                 If you need suppliers list, please explicitly ask to re-add its fetch and display.
