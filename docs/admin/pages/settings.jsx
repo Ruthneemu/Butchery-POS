@@ -6,7 +6,43 @@ import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import { FiUser, FiMail, FiLock, FiBell, FiBriefcase, FiKey, FiAlertCircle, FiLogOut, FiSave, FiEdit, FiTrash2, FiRefreshCcw } from 'react-icons/fi';
 
+// --- START: ConfirmationModal Component Definition ---
+// This is your Modal component, given the name ConfirmationModal
+function ConfirmationModal({ isOpen, onClose, title, children }) {
+  if (!isOpen) return null; // Don't render anything if not open
+
+  return (
+    // Backdrop for the modal
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50">
+      {/* Modal content area */}
+      <div className="relative p-6 bg-white rounded-lg shadow-xl max-w-sm mx-auto">
+        {/* Modal Header */}
+        <div className="flex justify-between items-center mb-4 border-b pb-3">
+          <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
+          {/* Close button */}
+          <button
+            onClick={onClose}
+            className="text-gray-500 hover:text-gray-700 focus:outline-none"
+            aria-label="Close modal"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+        </div>
+        {/* Modal Body (children) */}
+        <div>
+          {children}
+        </div>
+      </div>
+    </div>
+  );
+}
+// --- END: ConfirmationModal Component Definition ---
+
+
 export default function Settings() {
+  // 'user' state will hold the authenticated user object, not a specific user's data.
   const [user, setUser] = useState(null);
   const [email, setEmail] = useState('');
   const [newEmail, setNewEmail] = useState('');
@@ -15,6 +51,7 @@ export default function Settings() {
   const [notificationPreferences, setNotificationPreferences] = useState(false);
 
   // Business settings states (to be stored in a separate table)
+  // These settings are for the currently authenticated user's business.
   const [businessSettings, setBusinessSettings] = useState({
     business_name: '',
     address: '',
@@ -22,7 +59,7 @@ export default function Settings() {
     kra_pin: '',
     receipt_footer_msg: '',
     default_currency: 'KES', // Default for Kenya
-    tax_rate_percent: 16,   // Default VAT rate in Kenya
+    tax_rate_percent: 16,    // Default VAT rate in Kenya
   });
 
   const [loading, setLoading] = useState(true);
@@ -33,26 +70,29 @@ export default function Settings() {
     notifications: false,
     business: false,
   });
+  // State to control the visibility of the delete confirmation modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
 
   const navigate = useNavigate();
 
   const fetchUserData = useCallback(async () => {
     setLoading(true);
+    // Fetches the currently authenticated user from Supabase. No specific user is referenced here.
     const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
 
     if (authUser) {
       setUser(authUser);
       setEmail(authUser.email || '');
       setNewEmail(authUser.email || '');
+      // user_metadata is dynamic data associated with the authenticated user.
       setName(authUser.user_metadata?.full_name || '');
       setNotificationPreferences(authUser.user_metadata?.notification_preferences || false);
 
-      // Fetch business settings
+      // Fetch business settings for the *currently authenticated user*.
       const { data: settingsData, error: settingsError } = await supabase
         .from('business_settings')
         .select('*')
-        .eq('user_id', authUser.id)
+        .eq('user_id', authUser.id) // Filters by the ID of the currently authenticated user.
         .single(); // Assuming one settings record per user
 
       if (settingsError && settingsError.code !== 'PGRST116') { // PGRST116 means no rows found
@@ -61,7 +101,7 @@ export default function Settings() {
       } else if (settingsData) {
         setBusinessSettings(settingsData);
       } else {
-        // If no settings exist, initialize with defaults
+        // If no settings exist for the current user, initialize with defaults
         setBusinessSettings(prev => ({ ...prev }));
       }
 
@@ -84,6 +124,7 @@ export default function Settings() {
 
     try {
       if (type === 'profile') {
+        // Updates the profile data for the currently authenticated user.
         updatePromise = supabase.auth.updateUser({ data: { full_name: name } });
       } else if (type === 'email') {
         if (!newEmail || !/\S+@\S+\.\S+/.test(newEmail)) {
@@ -91,6 +132,7 @@ export default function Settings() {
           setIsSaving(prev => ({ ...prev, email: false }));
           return;
         }
+        // Updates the email for the currently authenticated user.
         updatePromise = supabase.auth.updateUser({ email: newEmail });
         successMessage = 'Email updated. Please verify your new email address via the link sent to it.';
       } else if (type === 'password') {
@@ -99,11 +141,14 @@ export default function Settings() {
           setIsSaving(prev => ({ ...prev, password: false }));
           return;
         }
+        // Updates the password for the currently authenticated user.
         updatePromise = supabase.auth.updateUser({ password: newPassword });
         successMessage = 'Password updated successfully!';
       } else if (type === 'notifications') {
+        // Updates notification preferences for the currently authenticated user.
         updatePromise = supabase.auth.updateUser({ data: { notification_preferences: notificationPreferences } });
       } else if (type === 'business') {
+        // 'user.id' refers to the ID of the currently authenticated user.
         const payload = { ...businessSettings, user_id: user.id };
         if (businessSettings.id) { // If settings already exist, update
           updatePromise = supabase.from('business_settings').update(payload).eq('id', businessSettings.id);
@@ -150,23 +195,14 @@ export default function Settings() {
 
   const handleDeleteAccount = async () => {
     setShowDeleteModal(false); // Close modal
-    if (!user) {
+    if (!user) { // Checks if any user is logged in.
       toast.error('No user is currently logged in.');
       return;
     }
 
     try {
-      // Supabase's client-side API does not directly support deleting other users.
-      // This action typically requires an Admin context (e.g., a Supabase Edge Function).
-      // For a basic setup, you might temporarily enable "DELETE" on auth.users in RLS
-      // or implement a secure Edge Function. The client-side `api.deleteUser` is deprecated.
-      // For now, we'll simulate or instruct the user.
-      // If you are using a server-side function/edge function:
-      // const { error } = await supabase.functions.invoke('delete-user-function', { body: { userId: user.id } });
-
-      // For a simple client-side test (not recommended for production without careful RLS/security)
-      // Note: This requires the `anon` key to have `DELETE` permission on `auth.users` for the `delete_user_by_id` policy,
-      // which is highly insecure for production apps. A safer approach is to use a server-side function.
+      // Note: This calls a Supabase RPC (PostgreSQL function) to delete the *currently authenticated user*.
+      // The `user.id` passed here is the ID of the user who is currently logged in and initiating the deletion.
       const { error } = await supabase.rpc('delete_user_by_id', { user_id_to_delete: user.id });
 
       if (error) {
@@ -203,7 +239,7 @@ export default function Settings() {
     );
   }
 
-  if (!user) {
+  if (!user) { // Checks if a user object exists (i.e., if someone is logged in).
     return (
       <Layout breadcrumb="Settings">
         <div className="flex min-h-screen items-center justify-center p-4 bg-gray-50">
@@ -467,7 +503,7 @@ export default function Settings() {
               <FiAlertCircle className="mr-2" />Danger Zone
             </h2>
             <button
-              onClick={() => setShowDeleteModal(true)}
+              onClick={() => setShowDeleteModal(true)} {/* This button now opens the modal */}
               className="w-full bg-red-600 text-white py-2.5 px-4 rounded-md hover:bg-red-700 transition-colors duration-200 font-medium flex items-center justify-center"
             >
               <FiTrash2 className="mr-2" /> Delete Account
@@ -483,7 +519,8 @@ export default function Settings() {
       </div>
 
       {/* Delete Account Confirmation Modal */}
-      <Modal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Confirm Account Deletion">
+      {/* Now using the named ConfirmationModal component */}
+      <ConfirmationModal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Confirm Account Deletion">
         <p className="text-gray-700 mb-4">
           Are you absolutely sure you want to delete your account? This action is irreversible and all your data will be permanently lost.
         </p>
@@ -501,7 +538,7 @@ export default function Settings() {
             Delete Permanently
           </button>
         </div>
-      </Modal>
+      </ConfirmationModal>
     </Layout>
   );
 }
