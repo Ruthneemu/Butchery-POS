@@ -502,8 +502,8 @@ export default function Settings() {
             <h2 className="text-xl font-semibold text-red-700 flex items-center mb-4">
               <FiAlertCircle className="mr-2" />Danger Zone
             </h2>
-            <button
-              onClick={() => setShowDeleteModal(true)} {/* This button now opens the modal */}
+           <button
+              onClick={() => setShowDeleteModal(true)} // This button now opens the modal (Option 1: Comment on its own line after the prop)
               className="w-full bg-red-600 text-white py-2.5 px-4 rounded-md hover:bg-red-700 transition-colors duration-200 font-medium flex items-center justify-center"
             >
               <FiTrash2 className="mr-2" /> Delete Account
