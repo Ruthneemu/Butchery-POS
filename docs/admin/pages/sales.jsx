@@ -35,25 +35,15 @@ const Sales = () => {
                     throw inventoryError;
                 }
 
-                // --- MODIFICATION START (for inventory parsing) ---
-                // Ensure quantity and selling_price are parsed as numbers, defaulting to 0 if null/undefined
+                // Ensure quantity and selling_price are numbers when setting inventory state
                 const parsedInventory = (inventoryData || []).map(item => ({
                     ...item,
-                    // Defensive parsing: parseFloat and default to 0 if result is NaN or initial value is null/undefined
-                    quantity: parseFloat(item.quantity) || 0,
-                    selling_price: parseFloat(item.selling_price) || 0
+                    quantity: parseFloat(item.quantity || 0), // Ensure it's a number, default to 0 if null/undefined
+                    selling_price: parseFloat(item.selling_price || 0), // Ensure it's a number, default to 0 if null/undefined
                 }));
                 setInventory(parsedInventory);
-                // --- MODIFICATION END ---
 
-
-                // Fetch business settings (example of fixing the 404/406 issues)
-                // You might need a user ID if your RLS policies require it,
-                // but for fetching general settings, often user_id isn't needed
-                // unless it's specific settings per user.
-                // Assuming you want general business settings, not user-specific ones for the 404.
-                // For demonstration, I'm removing 'user_id=eq.cf916bb0-6582-4d1f-99f7-fabde9b8b7ac'
-                // as it was the part of the URL causing 404/406. Adjust if truly user-specific.
+                // Fetch business settings
                 const { data: settingsData, error: settingsError } = await supabase
                     .from('business_settings')
                     .select('*')
@@ -62,7 +52,6 @@ const Sales = () => {
                 if (settingsError) {
                     throw settingsError;
                 }
-                // You might use settingsData to pre-fill some fields or configure the UI
                 console.log("Business Settings:", settingsData);
 
             } catch (err) {
@@ -74,7 +63,7 @@ const Sales = () => {
         };
 
         fetchInitialData();
-    }, []); // Empty dependency array means this runs once on mount
+    }, []);
 
     const addItemToOrder = () => {
         if (!currentOrderItem || currentOrderQty <= 0 || isNaN(currentOrderQty)) {
@@ -84,29 +73,22 @@ const Sales = () => {
 
         const selectedInventoryItem = inventory.find(item => item.id === parseInt(currentOrderItem));
 
-        // --- MODIFICATION START (handle selectedInventoryItem being undefined) ---
         if (!selectedInventoryItem) {
-            alert('Selected item not found in inventory. Please refresh and try again, or add items to inventory.');
+            alert('Selected item not found in inventory.');
             return;
         }
-        // --- MODIFICATION END ---
 
-        // Check stock availability
-        // Ensure selectedInventoryItem.quantity is a number before comparison
-        if (parseFloat(selectedInventoryItem.quantity) < parseFloat(currentOrderQty)) {
-            // --- MODIFICATION START (handle .toFixed on potentially non-numeric value) ---
-            alert(`Not enough stock for ${selectedInventoryItem.name}. Available: ${parseFloat(selectedInventoryItem.quantity || 0).toFixed(2)}`);
-            // --- MODIFICATION END ---
+        // Use the already parsed numerical quantity from the inventory state
+        if (selectedInventoryItem.quantity < currentOrderQty) {
+            alert(`Not enough stock for ${selectedInventoryItem.name}. Available: ${selectedInventoryItem.quantity.toFixed(2)}`);
             return;
         }
 
         const newItem = {
             id: selectedInventoryItem.id,
             name: selectedInventoryItem.name,
-            // Ensure price is a number, defensive check
-            price: parseFloat(selectedInventoryItem.selling_price || 0),
-            // Ensure quantity is a number, defensive check
-            quantity: parseFloat(currentOrderQty || 0),
+            price: selectedInventoryItem.selling_price, // Already a number from parsedInventory
+            quantity: parseFloat(currentOrderQty), // Ensure quantity is a number
         };
 
         setOrderItems(prevItems => {
@@ -117,8 +99,7 @@ const Sales = () => {
                 const updatedItems = [...prevItems];
                 const updatedQty = updatedItems[existingItemIndex].quantity + newItem.quantity;
 
-                // Ensure selectedInventoryItem.quantity is a number before comparison
-                if (parseFloat(selectedInventoryItem.quantity) < updatedQty) {
+                if (selectedInventoryItem.quantity < updatedQty) {
                     alert(`Adding this quantity would exceed available stock for ${selectedInventoryItem.name}.`);
                     return prevItems; // Don't update if exceeds stock
                 }
@@ -152,8 +133,7 @@ const Sales = () => {
         setLoading(true);
         setError(null);
         try {
-            // Ensure all items' price and quantity are numbers before sum
-            const orderTotal = orderItems.reduce((sum, item) => sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0);
+            const orderTotal = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
 
             // 1. Insert the new order into the 'orders' table
             const { data: orderData, error: orderError } = await supabase
@@ -197,9 +177,10 @@ const Sales = () => {
 
             // 3. Update inventory quantities
             const updates = orderItems.map(async (orderItem) => {
-                // Ensure currentStock is a number, defaulting to 0
-                const currentStock = parseFloat(inventory.find(inv => inv.id === orderItem.id)?.quantity || 0);
-                const newStock = currentStock - parseFloat(orderItem.quantity || 0); // Ensure orderItem.quantity is a number
+                const currentStock = inventory.find(inv => inv.id === orderItem.id)?.quantity;
+                // Ensure currentStock is a number, default to 0 if undefined/null
+                const safeCurrentStock = parseFloat(currentStock || 0);
+                const newStock = safeCurrentStock - orderItem.quantity;
 
                 const { error: updateError } = await supabase
                     .from('inventory')
@@ -226,6 +207,23 @@ const Sales = () => {
             setCurrentOrderQty(0.01);
             setOrderItems([]);
 
+            // Re-fetch inventory to reflect updated stock levels
+            // This is crucial after placing an order to show correct stock
+            const { data: updatedInventoryData, error: updatedInventoryError } = await supabase
+                .from('inventory')
+                .select('*');
+
+            if (updatedInventoryError) {
+                console.error("Failed to re-fetch inventory after order placement:", updatedInventoryError);
+            } else {
+                const parsedUpdatedInventory = (updatedInventoryData || []).map(item => ({
+                    ...item,
+                    quantity: parseFloat(item.quantity || 0),
+                    selling_price: parseFloat(item.selling_price || 0),
+                }));
+                setInventory(parsedUpdatedInventory);
+            }
+
             // Hide success message after a few seconds
             setTimeout(() => setShowSuccessMessage(false), 3000);
 
@@ -237,7 +235,6 @@ const Sales = () => {
             setLoading(false);
         }
     };
-
     return (
         <Layout>
             <div className="min-h-screen bg-gray-100 p-4 sm:p-6 lg:p-8">
@@ -341,13 +338,11 @@ const Sales = () => {
                                         onChange={(e) => setCurrentOrderItem(e.target.value)}
                                     >
                                         <option value="">Choose an Item</option>
-                                        {/* --- MODIFICATION START (Defensive .toFixed() in JSX) --- */}
                                         {inventory.map(item => (
                                             <option key={item.id} value={item.id}>
-                                                {item.name} - KSh {parseFloat(item.selling_price || 0).toFixed(2)}/unit (Stock: {parseFloat(item.quantity || 0).toFixed(2)})
+                                                {item.name} - KSh {item.selling_price.toFixed(2)}/unit (Stock: {item.quantity.toFixed(2)})
                                             </option>
                                         ))}
-                                        {/* --- MODIFICATION END --- */}
                                     </select>
                                 </div>
                                 <div className="w-28">
@@ -359,10 +354,9 @@ const Sales = () => {
                                         step="0.01"
                                         className="w-full p-3 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
                                         value={currentOrderQty}
-                                        // Crucial: Ensure quantity is always a number, handle potential NaN
                                         onChange={(e) => {
                                             const val = parseFloat(e.target.value);
-                                            setCurrentOrderQty(isNaN(val) ? 0.01 : val); // Default to 0.01 if invalid
+                                            setCurrentOrderQty(isNaN(val) ? 0.01 : val);
                                         }}
                                     />
                                 </div>
@@ -384,10 +378,7 @@ const Sales = () => {
                                             <div>
                                                 <div className="font-medium text-gray-900">{item.name}</div>
                                                 <div className="text-sm text-gray-600">
-                                                    {/* --- MODIFICATION START (Defensive .toFixed() in JSX) --- */}
-                                                    {/* Ensure item.quantity and item.price are numbers here */}
-                                                    {parseFloat(item.quantity || 0).toFixed(2)} × KSh {parseFloat(item.price || 0).toFixed(2)} = <span className="font-semibold">KSh {(parseFloat(item.quantity || 0) * parseFloat(item.price || 0)).toFixed(2)}</span>
-                                                    {/* --- MODIFICATION END --- */}
+                                                    {item.quantity.toFixed(2)} × KSh {item.price.toFixed(2)} = <span className="font-semibold">KSh {(item.quantity * item.price).toFixed(2)}</span>
                                                 </div>
                                             </div>
                                             <button
@@ -407,14 +398,12 @@ const Sales = () => {
                                 <div className="flex justify-between font-bold text-xl text-gray-800 mb-4">
                                     <span>Order Total:</span>
                                     <span>
-                                        {/* --- MODIFICATION START (Defensive .toFixed() in JSX) --- */}
-                                        KSh {orderItems.reduce((sum, item) => sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0).toFixed(2)}
-                                        {/* --- MODIFICATION END --- */}
+                                        KSh {orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}
                                     </span>
                                 </div>
                                 <button
                                     onClick={placeOrder}
-                                    disabled={orderItems.length === 0 || !customerName.trim() || loading} // Disable while loading
+                                    disabled={orderItems.length === 0 || !customerName.trim() || loading}
                                     className={`w-full py-3 rounded-md text-white font-semibold text-lg transition-colors duration-200 ${
                                         orderItems.length === 0 || !customerName.trim() || loading
                                             ? 'bg-gray-400 cursor-not-allowed'
@@ -431,5 +420,4 @@ const Sales = () => {
         </Layout>
     );
 };
-
 export default Sales;
