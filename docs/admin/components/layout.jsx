@@ -5,7 +5,7 @@ import LogoutButton from './logoutButton';
 const navItems = [
   { name: "Dashboard", path: "/" },
   { name: "Inventory", path: "/inventory" },
-  { name: "Sales", path: "/sales" },
+  { name: "Sales", path: "/sales"},
   { name: "Reports", path: "/reports" },
   { name: "Employee", path: "/employee" },
   { name: "Payment", path: "/payment" },
