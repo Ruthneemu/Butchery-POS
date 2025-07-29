@@ -33,8 +33,13 @@ useEffect(() => {
                 if (inventoryError) {
                     throw inventoryError;
                 }
-                setInventory(inventoryData || []); // Ensure it's an array
-
+                
+                // Ensure quantity and selling_price are parsed as numbers
+                const parsedInventory = (inventoryData || []).map(item => ({
+                ...item,
+                quantity: parseFloat(item.quantity) || 0, // Default to 0 if NaN
+                selling_price: parseFloat(item.selling_price) || 0 // Default to 0 if NaN
+               }));
                 // Fetch business settings (example of fixing the 404/406 issues)
                 // You might need a user ID if your RLS policies require it,
                 // but for fetching general settings, often user_id isn't needed
