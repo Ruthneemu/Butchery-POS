@@ -20,7 +20,8 @@ const Sales = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [showSuccessMessage, setShowSuccessMessage] = useState(false); // For order placement feedback
-useEffect(() => {
+
+    useEffect(() => {
         const fetchInitialData = async () => {
             setLoading(true);
             setError(null);
@@ -33,25 +34,30 @@ useEffect(() => {
                 if (inventoryError) {
                     throw inventoryError;
                 }
-                
-                // Ensure quantity and selling_price are parsed as numbers
+
+                // --- MODIFICATION START (for inventory parsing) ---
+                // Ensure quantity and selling_price are parsed as numbers, defaulting to 0 if null/undefined
                 const parsedInventory = (inventoryData || []).map(item => ({
-                ...item,
-                quantity: parseFloat(item.quantity) || 0, // Default to 0 if NaN
-                selling_price: parseFloat(item.selling_price) || 0 // Default to 0 if NaN
-               }));
+                    ...item,
+                    // Defensive parsing: parseFloat and default to 0 if result is NaN or initial value is null/undefined
+                    quantity: parseFloat(item.quantity) || 0,
+                    selling_price: parseFloat(item.selling_price) || 0
+                }));
+                setInventory(parsedInventory);
+                // --- MODIFICATION END ---
+
+
                 // Fetch business settings (example of fixing the 404/406 issues)
                 // You might need a user ID if your RLS policies require it,
                 // but for fetching general settings, often user_id isn't needed
                 // unless it's specific settings per user.
                 // Assuming you want general business settings, not user-specific ones for the 404.
-                // If it IS user-specific, ensure 'auth.user().id' or similar is correctly passed.
                 // For demonstration, I'm removing 'user_id=eq.cf916bb0-6582-4d1f-99f7-fabde9b8b7ac'
                 // as it was the part of the URL causing 404/406. Adjust if truly user-specific.
                 const { data: settingsData, error: settingsError } = await supabase
                     .from('business_settings')
                     .select('*')
-                    .limit(1); // Assuming you only need one row of settings
+                    .limit(1);
 
                 if (settingsError) {
                     throw settingsError;
@@ -69,7 +75,6 @@ useEffect(() => {
 
         fetchInitialData();
     }, []); // Empty dependency array means this runs once on mount
-    // --- Part 3 continues from previous response ---
 
     const addItemToOrder = () => {
         if (!currentOrderItem || currentOrderQty <= 0 || isNaN(currentOrderQty)) {
@@ -79,22 +84,29 @@ useEffect(() => {
 
         const selectedInventoryItem = inventory.find(item => item.id === parseInt(currentOrderItem));
 
+        // --- MODIFICATION START (handle selectedInventoryItem being undefined) ---
         if (!selectedInventoryItem) {
-            alert('Selected item not found in inventory.');
+            alert('Selected item not found in inventory. Please refresh and try again, or add items to inventory.');
             return;
         }
+        // --- MODIFICATION END ---
 
         // Check stock availability
-        if (selectedInventoryItem.quantity < currentOrderQty) {
-            alert(`Not enough stock for ${selectedInventoryItem.name}. Available: ${selectedInventoryItem.quantity.toFixed(2)}`);
+        // Ensure selectedInventoryItem.quantity is a number before comparison
+        if (parseFloat(selectedInventoryItem.quantity) < parseFloat(currentOrderQty)) {
+            // --- MODIFICATION START (handle .toFixed on potentially non-numeric value) ---
+            alert(`Not enough stock for ${selectedInventoryItem.name}. Available: ${parseFloat(selectedInventoryItem.quantity || 0).toFixed(2)}`);
+            // --- MODIFICATION END ---
             return;
         }
 
         const newItem = {
             id: selectedInventoryItem.id,
             name: selectedInventoryItem.name,
-            price: parseFloat(selectedInventoryItem.selling_price), // Ensure price is a number
-            quantity: parseFloat(currentOrderQty), // Ensure quantity is a number
+            // Ensure price is a number, defensive check
+            price: parseFloat(selectedInventoryItem.selling_price || 0),
+            // Ensure quantity is a number, defensive check
+            quantity: parseFloat(currentOrderQty || 0),
         };
 
         setOrderItems(prevItems => {
@@ -105,7 +117,8 @@ useEffect(() => {
                 const updatedItems = [...prevItems];
                 const updatedQty = updatedItems[existingItemIndex].quantity + newItem.quantity;
 
-                if (selectedInventoryItem.quantity < updatedQty) {
+                // Ensure selectedInventoryItem.quantity is a number before comparison
+                if (parseFloat(selectedInventoryItem.quantity) < updatedQty) {
                     alert(`Adding this quantity would exceed available stock for ${selectedInventoryItem.name}.`);
                     return prevItems; // Don't update if exceeds stock
                 }
@@ -139,7 +152,8 @@ useEffect(() => {
         setLoading(true);
         setError(null);
         try {
-            const orderTotal = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            // Ensure all items' price and quantity are numbers before sum
+            const orderTotal = orderItems.reduce((sum, item) => sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0);
 
             // 1. Insert the new order into the 'orders' table
             const { data: orderData, error: orderError } = await supabase
@@ -183,8 +197,9 @@ useEffect(() => {
 
             // 3. Update inventory quantities
             const updates = orderItems.map(async (orderItem) => {
-                const currentStock = inventory.find(inv => inv.id === orderItem.id)?.quantity;
-                const newStock = currentStock - orderItem.quantity;
+                // Ensure currentStock is a number, defaulting to 0
+                const currentStock = parseFloat(inventory.find(inv => inv.id === orderItem.id)?.quantity || 0);
+                const newStock = currentStock - parseFloat(orderItem.quantity || 0); // Ensure orderItem.quantity is a number
 
                 const { error: updateError } = await supabase
                     .from('inventory')
@@ -222,6 +237,7 @@ useEffect(() => {
             setLoading(false);
         }
     };
+
     return (
         <Layout>
             <div className="min-h-screen bg-gray-100 p-4 sm:p-6 lg:p-8">
@@ -325,11 +341,13 @@ useEffect(() => {
                                         onChange={(e) => setCurrentOrderItem(e.target.value)}
                                     >
                                         <option value="">Choose an Item</option>
+                                        {/* --- MODIFICATION START (Defensive .toFixed() in JSX) --- */}
                                         {inventory.map(item => (
                                             <option key={item.id} value={item.id}>
-                                                {item.name} - KSh {parseFloat(item.selling_price).toFixed(2)}/unit (Stock: {parseFloat(item.quantity).toFixed(2)})
+                                                {item.name} - KSh {parseFloat(item.selling_price || 0).toFixed(2)}/unit (Stock: {parseFloat(item.quantity || 0).toFixed(2)})
                                             </option>
                                         ))}
+                                        {/* --- MODIFICATION END --- */}
                                     </select>
                                 </div>
                                 <div className="w-28">
@@ -366,8 +384,10 @@ useEffect(() => {
                                             <div>
                                                 <div className="font-medium text-gray-900">{item.name}</div>
                                                 <div className="text-sm text-gray-600">
+                                                    {/* --- MODIFICATION START (Defensive .toFixed() in JSX) --- */}
                                                     {/* Ensure item.quantity and item.price are numbers here */}
-                                                    {parseFloat(item.quantity).toFixed(2)} × KSh {parseFloat(item.price).toFixed(2)} = <span className="font-semibold">KSh {(parseFloat(item.quantity) * parseFloat(item.price)).toFixed(2)}</span>
+                                                    {parseFloat(item.quantity || 0).toFixed(2)} × KSh {parseFloat(item.price || 0).toFixed(2)} = <span className="font-semibold">KSh {(parseFloat(item.quantity || 0) * parseFloat(item.price || 0)).toFixed(2)}</span>
+                                                    {/* --- MODIFICATION END --- */}
                                                 </div>
                                             </div>
                                             <button
@@ -387,7 +407,9 @@ useEffect(() => {
                                 <div className="flex justify-between font-bold text-xl text-gray-800 mb-4">
                                     <span>Order Total:</span>
                                     <span>
-                                        KSh {orderItems.reduce((sum, item) => sum + (parseFloat(item.price) * parseFloat(item.quantity)), 0).toFixed(2)}
+                                        {/* --- MODIFICATION START (Defensive .toFixed() in JSX) --- */}
+                                        KSh {orderItems.reduce((sum, item) => sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0).toFixed(2)}
+                                        {/* --- MODIFICATION END --- */}
                                     </span>
                                 </div>
                                 <button
