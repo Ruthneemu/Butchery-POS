@@ -23,14 +23,11 @@ const Sales = () => {
     const [currentOrderWeight, setCurrentOrderWeight] = useState(0.01);
     const [orderItems, setOrderItems] = useState([]);
     
-<<<<<<< HEAD
     // NEW: Selling method state (by weight or by amount)
     const [sellingMethod, setSellingMethod] = useState('weight'); // 'weight' or 'amount'
     const [targetAmount, setTargetAmount] = useState('');
     const [calculatedWeight, setCalculatedWeight] = useState(0);
     
-=======
->>>>>>> refs/remotes/origin/main
     // Weighing scale integration
     const [scaleConnected, setScaleConnected] = useState(false);
     const [scaleReading, setScaleReading] = useState(0);
@@ -96,7 +93,6 @@ const Sales = () => {
         fetchInitialData();
     }, []);
 
-<<<<<<< HEAD
     // NEW: Calculate weight when target amount changes
     useEffect(() => {
         if (sellingMethod === 'amount' && targetAmount && currentOrderItem) {
@@ -125,8 +121,6 @@ const Sales = () => {
         }
     }, [scaleReading, sellingMethod, useScale, currentOrderItem, inventory]);
 
-=======
->>>>>>> refs/remotes/origin/main
     // Function to simulate connecting to a weighing scale
     const tryConnectToScale = () => {
         if ('serial' in navigator) {
@@ -138,13 +132,9 @@ const Sales = () => {
                 if (useScale) {
                     const randomWeight = (Math.random() * 4.9 + 0.1).toFixed(2);
                     setScaleReading(parseFloat(randomWeight));
-<<<<<<< HEAD
                     if (sellingMethod === 'weight') {
                         setCurrentOrderWeight(parseFloat(randomWeight));
                     }
-=======
-                    setCurrentOrderWeight(parseFloat(randomWeight));
->>>>>>> refs/remotes/origin/main
                 }
             }, 2000);
             
@@ -177,14 +167,10 @@ const Sales = () => {
                     const weight = parseFloat(weightMatch[1]);
                     setScaleReading(weight);
                     if (useScale) {
-<<<<<<< HEAD
                         if (sellingMethod === 'weight') {
                             setCurrentOrderWeight(weight);
                         }
                         // For amount-based selling, the useEffect will handle the calculation
-=======
-                        setCurrentOrderWeight(weight);
->>>>>>> refs/remotes/origin/main
                     }
                 }
             }
@@ -298,12 +284,8 @@ const Sales = () => {
             price_per_kg: pricePerKg,
             weight: parseFloat(currentOrderWeight),
             total_price: totalPrice,
-<<<<<<< HEAD
             unit: 'kg',
             selling_method: sellingMethod // Track how this item was sold
-=======
-            unit: 'kg'
->>>>>>> refs/remotes/origin/main
         };
 
         setOrderItems(prevItems => {
@@ -326,17 +308,12 @@ const Sales = () => {
             }
         });
 
-<<<<<<< HEAD
         // Reset form
         setCurrentOrderItem('');
         setCurrentOrderWeight(0.01);
         setTargetAmount('');
         setCalculatedWeight(0);
         setSellingMethod('weight');
-=======
-        setCurrentOrderItem('');
-        setCurrentOrderWeight(0.01);
->>>>>>> refs/remotes/origin/main
     };
 
     const removeItemFromOrder = (indexToRemove) => {
@@ -458,12 +435,9 @@ const Sales = () => {
             setCurrentOrderItem('');
             setCurrentOrderWeight(0.01);
             setOrderItems([]);
-<<<<<<< HEAD
             setTargetAmount('');
             setCalculatedWeight(0);
             setSellingMethod('weight');
-=======
->>>>>>> refs/remotes/origin/main
 
             // Re-fetch inventory
             const { data: updatedInventoryData, error: updatedInventoryError } = await supabase
@@ -497,14 +471,10 @@ const Sales = () => {
     const captureWeightFromScale = () => {
         if (scaleConnected) {
             setUseScale(true);
-<<<<<<< HEAD
             if (sellingMethod === 'weight') {
                 setCurrentOrderWeight(scaleReading);
             }
             // For amount-based selling, the weight will be captured automatically via useEffect
-=======
-            setCurrentOrderWeight(scaleReading);
->>>>>>> refs/remotes/origin/main
         } else {
             alert('Weighing scale is not connected. Please enter weight manually.');
         }
@@ -663,7 +633,6 @@ const Sales = () => {
                                 <div className="space-y-5 p-4 bg-gray-50 rounded-lg shadow-inner">
                                     <h3 className="text-xl font-medium text-gray-700 border-b pb-2 mb-4">Order Items</h3>
 
-<<<<<<< HEAD
                                     {/* Selling Method Selection */}
                                     <div className="bg-blue-50 p-3 rounded-lg border border-blue-200">
                                         <label className="block text-sm font-medium text-gray-700 mb-2">Selling Method</label>
@@ -694,9 +663,6 @@ const Sales = () => {
                                     </div>
 
                                     <div className="flex flex-col gap-3">
-=======
-                                    <div className="flex flex-col sm:flex-row gap-3 items-end">
->>>>>>> refs/remotes/origin/main
                                         <div className="flex-grow">
                                             <label htmlFor="currentOrderItem" className="block text-sm font-medium text-gray-700 mb-1">Select Meat Product</label>
                                             <select
@@ -713,7 +679,6 @@ const Sales = () => {
                                                 ))}
                                             </select>
                                         </div>
-<<<<<<< HEAD
 
                                         {/* Dynamic input based on selling method */}
                                         {sellingMethod === 'weight' ? (
@@ -789,30 +754,6 @@ const Sales = () => {
                                                 </div>
                                             </div>
                                         )}
-=======
-                                        <div className="w-28">
-                                            <label htmlFor="currentOrderWeight" className="block text-sm font-medium text-gray-700 mb-1">Weight (kg)</label>
-                                            <input
-                                                id="currentOrderWeight"
-                                                type="number"
-                                                min="0.01"
-                                                step="0.01"
-                                                className="w-full p-3 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500"
-                                                value={currentOrderWeight}
-                                                onChange={(e) => {
-                                                    const val = parseFloat(e.target.value);
-                                                    setCurrentOrderWeight(isNaN(val) ? 0.01 : val);
-                                                    setUseScale(false);
-                                                }}
-                                            />
-                                        </div>
-                                        <button
-                                            onClick={addItemToOrder}
-                                            className="bg-indigo-600 text-white px-5 py-3 rounded-md hover:bg-indigo-700 transition-colors duration-200 flex-shrink-0"
-                                        >
-                                            Add Item
-                                        </button>
->>>>>>> refs/remotes/origin/main
                                     </div>
 
                                     {/* Items List */}
@@ -823,7 +764,6 @@ const Sales = () => {
                                             orderItems.map((item, index) => (
                                                 <div key={index} className="p-4 flex justify-between items-center bg-white hover:bg-gray-50">
                                                     <div>
-<<<<<<< HEAD
                                                         <div className="font-medium text-gray-900">
                                                             {item.name}
                                                             {item.selling_method === 'amount' && (
@@ -832,9 +772,6 @@ const Sales = () => {
                                                                 </span>
                                                             )}
                                                         </div>
-=======
-                                                        <div className="font-medium text-gray-900">{item.name}</div>
->>>>>>> refs/remotes/origin/main
                                                         <div className="text-sm text-gray-600">
                                                             {item.weight.toFixed(2)} kg × KSh {item.price_per_kg.toFixed(2)}/kg = <span className="font-semibold">KSh {item.total_price.toFixed(2)}</span>
                                                         </div>
@@ -906,11 +843,7 @@ const Sales = () => {
                                                     : 'bg-red-600 hover:bg-red-700'
                                             }`}
                                         >
-<<<<<<< HEAD
                                             {loading ? 'Processing Order...' : 'Place Order'}
-=======
-                                            {loading ? 'Processing Order...' : 'Place Order 🚀'}
->>>>>>> refs/remotes/origin/main
                                         </button>
                                     </div>
                                 </div>
@@ -1101,8 +1034,4 @@ const Sales = () => {
     );
 };
 
-<<<<<<< HEAD
 export default Sales;
-=======
-export default Sales;
->>>>>>> refs/remotes/origin/main
