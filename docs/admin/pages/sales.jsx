@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import Layout from '../components/Layout';
+import Layout from "../components/layout";
 
 const Sales = () => {
     // State for order details
