@@ -33,6 +33,7 @@ const Inventory = () => {
   const [adjustmentQuantity, setAdjustmentQuantity] = useState('');
   const [adjustmentReason, setAdjustmentReason] = useState('');
   const [adjustmentType, setAdjustmentType] = useState('increase');
+  const [adjustmentDate, setAdjustmentDate] = useState(new Date().toISOString().split('T')[0]);
 
   // Purchase Order states
   const [showPurchaseOrder, setShowPurchaseOrder] = useState(false);
@@ -58,86 +59,125 @@ const Inventory = () => {
   // Fetch products from Supabase
   const fetchProducts = async () => {
     setLoading(true);
-    let query = supabase
-      .from('inventory')
-      .select('*')
-      .order('created_at', { ascending: false });
+    try {
+      let query = supabase
+        .from('inventory')
+        .select('*')
+        .order('created_at', { ascending: false });
 
-    if (lowStockFilter) {
-      query = query.lt('quantity', 5);
-    }
-
-    if (nearExpiryFilter) {
-      const today = new Date();
-      const nextWeek = new Date(today);
-      nextWeek.setDate(today.getDate() + 7);
-      query = query.lte('expiry_date', nextWeek.toISOString())
-                  .gte('expiry_date', today.toISOString());
-    }
-
-    if (searchTerm) {
-      query = query.ilike('name', `%${searchTerm}%`);
-    }
-
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Error fetching products:', error.message);
-    } else {
-      setProducts(data);
-      // Initialize stock take counts
-      if (stockTakeMode) {
-        const counts = {};
-        data.forEach(product => {
-          counts[product.id] = product.quantity;
-        });
-        setStockTakeCounts(counts);
+      if (lowStockFilter) {
+        query = query.lt('quantity', 5);
       }
+
+      if (nearExpiryFilter) {
+        const today = new Date();
+        const nextWeek = new Date(today);
+        nextWeek.setDate(today.getDate() + 7);
+        query = query.lte('expiry_date', nextWeek.toISOString())
+                    .gte('expiry_date', today.toISOString());
+      }
+
+      if (searchTerm) {
+        query = query.ilike('name', `%${searchTerm}%`);
+      }
+
+      const { data, error } = await query;
+
+      if (error) {
+        console.error('Error fetching products:', error.message);
+        setError(error.message);
+      } else {
+        // Ensure all numeric values are properly parsed
+        const parsedData = (data || []).map(item => ({
+          ...item,
+          quantity: parseFloat(item.quantity || 0),
+          price: parseFloat(item.price || 0),
+          selling_price: parseFloat(item.selling_price || 0)
+        }));
+        setProducts(parsedData);
+        
+        // Initialize stock take counts
+        if (stockTakeMode) {
+          const counts = {};
+          parsedData.forEach(product => {
+            counts[product.id] = product.quantity;
+          });
+          setStockTakeCounts(counts);
+        }
+      }
+    } catch (err) {
+      console.error('Unexpected error fetching products:', err);
+      setError('Failed to fetch products: ' + err.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   // Fetch purchase orders from Supabase
   const fetchPurchaseOrders = async () => {
-    const { data, error } = await supabase
-      .from('purchase_orders')
-      .select('*')
-      .order('order_date', { ascending: false });
+    try {
+      const { data, error } = await supabase
+        .from('purchase_orders')
+        .select('*')
+        .order('order_date', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching purchase orders:', error.message);
-    } else {
-      setPurchaseOrders(data);
+      if (error) {
+        console.error('Error fetching purchase orders:', error.message);
+        setError(error.message);
+      } else {
+        // Parse numeric values in purchase orders
+        const parsedData = (data || []).map(order => ({
+          ...order,
+          total_amount: parseFloat(order.total_amount || 0),
+          items: (order.items || []).map(item => ({
+            ...item,
+            quantity: parseFloat(item.quantity || 0),
+            price: parseFloat(item.price || 0),
+            total_cost: parseFloat(item.total_cost || 0)
+          }))
+        }));
+        setPurchaseOrders(parsedData);
+      }
+    } catch (err) {
+      console.error('Unexpected error fetching purchase orders:', err);
+      setError('Failed to fetch purchase orders: ' + err.message);
     }
   };
 
-  
-   
+  useEffect(() => {
+    fetchProducts();
+    fetchPurchaseOrders();
+  }, [searchTerm, lowStockFilter, nearExpiryFilter]);
 
   // Upload image to Supabase storage
   const uploadImage = async (file, productId) => {
     if (!file) return null;
     
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${productId || 'temp'}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
-    
-    const { data, error } = await supabase
-      .storage
-      .from('product-images')
-      .upload(fileName, file);
-    
-    if (error) {
-      console.error('Error uploading image:', error.message);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${productId || 'temp'}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+      
+      const { data, error } = await supabase
+        .storage
+        .from('product-images')
+        .upload(fileName, file);
+      
+      if (error) {
+        console.error('Error uploading image:', error.message);
+        return null;
+      }
+      
+      // Get public URL
+      const { data: { publicUrl } } = supabase
+        .storage
+        .from('product-images')
+        .getPublicUrl(data.path);
+      
+      return publicUrl;
+    } catch (err) {
+      console.error('Unexpected error uploading image:', err);
       return null;
     }
-    
-    // Get public URL
-    const { data: { publicUrl } } = supabase
-      .storage
-      .from('product-images')
-      .getPublicUrl(data.path);
-    
-    return publicUrl;
   };
 
   // Add new product
@@ -157,11 +197,11 @@ const Inventory = () => {
         .insert([
           {
             name: newName,
-            quantity: Number(newQuantity),
+            quantity: parseFloat(newQuantity || 0),
             expiry_date: newExpiry || null,
-            price: Number(newPrice),
+            price: parseFloat(newPrice || 0),
             unit: newUnit,
-            selling_price: Number(sellingPrice) || Number(newPrice) * 1.2
+            selling_price: parseFloat(sellingPrice || newPrice || 0) * 1.2
           },
         ])
         .select()
@@ -201,11 +241,15 @@ const Inventory = () => {
   const deleteProduct = async (id) => {
     if (!window.confirm('Are you sure you want to delete this product?')) return;
 
-    const { error } = await supabase.from('inventory').delete().eq('id', id);
-    if (error) {
-      alert('Failed to delete: ' + error.message);
-    } else {
-      fetchProducts();
+    try {
+      const { error } = await supabase.from('inventory').delete().eq('id', id);
+      if (error) {
+        alert('Failed to delete: ' + error.message);
+      } else {
+        fetchProducts();
+      }
+    } catch (err) {
+      alert('Failed to delete: ' + err.message);
     }
   };
 
@@ -215,9 +259,9 @@ const Inventory = () => {
     setEditName(product.name);
     setEditQuantity(product.quantity);
     setEditExpiry(product.expiry_date?.slice(0, 10) || '');
-    setEditPrice(product.price ?? '');
-    setEditUnit(product.unit ?? 'kg');
-    setEditSellingPrice(product.selling_price ?? '');
+    setEditPrice(product.price);
+    setEditUnit(product.unit || 'kg');
+    setEditSellingPrice(product.selling_price);
   };
 
   // Cancel editing
@@ -241,11 +285,11 @@ const Inventory = () => {
     try {
       const updateData = {
         name: editName,
-        quantity: Number(editQuantity),
+        quantity: parseFloat(editQuantity || 0),
         expiry_date: editExpiry || null,
-        price: Number(editPrice),
+        price: parseFloat(editPrice || 0),
         unit: editUnit,
-        selling_price: Number(editSellingPrice) || Number(editPrice) * 1.2
+        selling_price: parseFloat(editSellingPrice || editPrice || 0) * 1.2
       };
 
       // Upload new image if provided
@@ -270,8 +314,6 @@ const Inventory = () => {
     }
   };
 
-  
-
   // Stock take functions
   const startStockTake = () => {
     const counts = {};
@@ -285,7 +327,7 @@ const Inventory = () => {
   const updateStockTakeCount = (id, value) => {
     setStockTakeCounts(prev => ({
       ...prev,
-      [id]: Number(value)
+      [id]: parseFloat(value || 0)
     }));
   };
 
@@ -294,7 +336,7 @@ const Inventory = () => {
       // Prepare updates
       const updates = Object.keys(stockTakeCounts).map(id => ({
         id,
-        quantity: stockTakeCounts[id]
+        quantity: parseFloat(stockTakeCounts[id] || 0)
       }));
 
       // Batch update
@@ -312,76 +354,75 @@ const Inventory = () => {
     }
   };
 
-
   // Stock Adjustment functions
   const createStockAdjustment = async () => {
-  if (!adjustmentProductId || !adjustmentQuantity || !adjustmentReason) {
-    alert('Please fill in all required fields');
-    return;
-  }
-
-  try {
-    // Get current product
-    const { data: product, error: productError } = await supabase
-      .from('inventory')
-      .select('*')
-      .eq('id', adjustmentProductId)
-      .single();
-
-    if (productError) throw productError;
-    if (!product) throw new Error('Product not found');
-
-    // Calculate new quantity
-    const quantityChange = adjustmentType === 'increase' 
-      ? Number(adjustmentQuantity) 
-      : -Number(adjustmentQuantity);
-    
-    const newQuantity = product.quantity + quantityChange;
-
-    if (newQuantity < 0) {
-      alert('Resulting quantity cannot be negative');
+    if (!adjustmentProductId || !adjustmentQuantity || !adjustmentReason) {
+      alert('Please fill in all required fields');
       return;
     }
 
-    // Update product quantity
-    const { error: updateError } = await supabase
-      .from('inventory')
-      .update({ quantity: newQuantity })
-      .eq('id', adjustmentProductId);
+    try {
+      // Get current product
+      const { data: product, error: productError } = await supabase
+        .from('inventory')
+        .select('*')
+        .eq('id', adjustmentProductId)
+        .single();
 
-    if (updateError) throw updateError;
+      if (productError) throw productError;
+      if (!product) throw new Error('Product not found');
 
-    // Record adjustment in stock_adjustments table
-    const { error: adjustmentError } = await supabase
-      .from('stock_adjustments')
-      .insert([{
-        product_id: adjustmentProductId,
-        product_name: product.name,
-        adjustment_type: adjustmentType,
-        quantity: adjustmentQuantity,
-        previous_quantity: product.quantity,
-        new_quantity: newQuantity,
-        reason: adjustmentReason,
-        adjustment_date: adjustmentDate,
-        adjusted_by: 'admin'
-      }])
-      .select(); // Add .select() to get better error reporting
+      // Calculate new quantity
+      const quantityChange = adjustmentType === 'increase' 
+        ? parseFloat(adjustmentQuantity || 0) 
+        : -parseFloat(adjustmentQuantity || 0);
+      
+      const newQuantity = parseFloat(product.quantity || 0) + quantityChange;
 
-    if (adjustmentError) throw adjustmentError;
+      if (newQuantity < 0) {
+        alert('Resulting quantity cannot be negative');
+        return;
+      }
 
-    // Reset and refresh
-    setShowStockAdjustment(false);
-    setAdjustmentProductId(null);
-    setAdjustmentQuantity('');
-    setAdjustmentReason('');
-    fetchProducts();
-    alert('Stock adjustment recorded successfully!');
-    
-  } catch (error) {
-    console.error('Full error details:', error);
-    alert(`Error recording adjustment: ${error.message || 'Unknown error'}`);
-  }
-};
+      // Update product quantity
+      const { error: updateError } = await supabase
+        .from('inventory')
+        .update({ quantity: newQuantity })
+        .eq('id', adjustmentProductId);
+
+      if (updateError) throw updateError;
+
+      // Record adjustment in stock_adjustments table
+      const { error: adjustmentError } = await supabase
+        .from('stock_adjustments')
+        .insert([{
+          product_id: adjustmentProductId,
+          product_name: product.name,
+          adjustment_type: adjustmentType,
+          quantity: parseFloat(adjustmentQuantity || 0),
+          previous_quantity: parseFloat(product.quantity || 0),
+          new_quantity: newQuantity,
+          reason: adjustmentReason,
+          adjustment_date: adjustmentDate,
+          adjusted_by: 'admin'
+        }])
+        .select();
+
+      if (adjustmentError) throw adjustmentError;
+
+      // Reset and refresh
+      setShowStockAdjustment(false);
+      setAdjustmentProductId(null);
+      setAdjustmentQuantity('');
+      setAdjustmentReason('');
+      fetchProducts();
+      alert('Stock adjustment recorded successfully!');
+      
+    } catch (error) {
+      console.error('Full error details:', error);
+      alert(`Error recording adjustment: ${error.message || 'Unknown error'}`);
+    }
+  };
 
   // Purchase Order functions
   const createPurchaseOrder = async () => {
@@ -396,7 +437,7 @@ const Inventory = () => {
         .insert([{
           ...newPurchaseOrder,
           total_amount: newPurchaseOrder.items.reduce(
-            (sum, item) => sum + (item.price * item.quantity), 0
+            (sum, item) => sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0
           )
         }])
         .select();
@@ -420,35 +461,35 @@ const Inventory = () => {
   };
 
   const addPoItem = () => {
-  if (!poItemProduct || !poItemQuantity) {
-    alert('Please select a product and enter quantity');
-    return;
-  }
+    if (!poItemProduct || !poItemQuantity) {
+      alert('Please select a product and enter quantity');
+      return;
+    }
 
-  const product = products.find(p => p.id === poItemProduct);
-  if (!product) return;
+    const product = products.find(p => p.id === poItemProduct);
+    if (!product) return;
 
-  // Calculate price per unit (per kg)
-  const pricePerUnit = product.price / product.quantity;
+    // Calculate price per unit (per kg)
+    const pricePerUnit = parseFloat(product.price || 0) / parseFloat(product.quantity || 1);
 
-  setNewPurchaseOrder(prev => ({
-    ...prev,
-    items: [
-      ...prev.items,
-      {
-        product_id: product.id,
-        product_name: product.name,
-        quantity: Number(poItemQuantity),
-        price: pricePerUnit, // This is now the price per unit
-        unit: product.unit,
-        total_cost: pricePerUnit * Number(poItemQuantity)
-      }
-    ]
-  }));
+    setNewPurchaseOrder(prev => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        {
+          product_id: product.id,
+          product_name: product.name,
+          quantity: parseFloat(poItemQuantity || 0),
+          price: pricePerUnit,
+          unit: product.unit,
+          total_cost: pricePerUnit * parseFloat(poItemQuantity || 0)
+        }
+      ]
+    }));
 
-  setPoItemProduct('');
-  setPoItemQuantity('');
-};
+    setPoItemProduct('');
+    setPoItemQuantity('');
+  };
 
   const removePoItem = (index) => {
     setNewPurchaseOrder(prev => ({
@@ -480,7 +521,7 @@ const Inventory = () => {
 
         if (!product) continue;
 
-        const newQuantity = product.quantity + item.quantity;
+        const newQuantity = parseFloat(product.quantity || 0) + parseFloat(item.quantity || 0);
 
         await supabase
           .from('inventory')
@@ -503,7 +544,7 @@ const Inventory = () => {
   };
 
   // Helper: check if product is low stock (<5 units)
-  const isLowStock = (qty) => qty < 5;
+  const isLowStock = (qty) => parseFloat(qty || 0) < 5;
 
   // Helper: check if product expiry is within 7 days
   const isNearExpiry = (expiry) => {
@@ -519,11 +560,11 @@ const Inventory = () => {
     ['Name', 'Quantity', 'Price', 'Unit', 'Expiry Date', 'Selling Price'],
     ...products.map(product => [
       product.name,
-      product.quantity,
-      product.price,
+      parseFloat(product.quantity || 0),
+      parseFloat(product.price || 0),
       product.unit,
       product.expiry_date || '',
-      product.selling_price || ''
+      parseFloat(product.selling_price || 0)
     ])
   ];
 
@@ -615,7 +656,7 @@ const Inventory = () => {
                   <option value="">Select Product</option>
                   {products.map(product => (
                     <option key={product.id} value={product.id}>
-                      {product.name} ({product.quantity} {product.unit})
+                      {product.name} ({parseFloat(product.quantity || 0).toFixed(2)} {product.unit})
                     </option>
                   ))}
                 </select>
@@ -655,6 +696,16 @@ const Inventory = () => {
                 />
               </div>
               
+              <div className="mb-4">
+                <label className="block mb-1 font-medium">Adjustment Date</label>
+                <input
+                  type="date"
+                  className="w-full border border-gray-300 rounded px-3 py-2"
+                  value={adjustmentDate}
+                  onChange={(e) => setAdjustmentDate(e.target.value)}
+                />
+              </div>
+              
               <div className="flex justify-end space-x-2">
                 <button
                   onClick={() => setShowStockAdjustment(false)}
@@ -673,155 +724,155 @@ const Inventory = () => {
           </div>
         )}
 
-{/* Purchase Order Modal */}
-{showPurchaseOrder && (
-  <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-    <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
-      <h2 className="text-xl font-semibold mb-4">Create Purchase Order</h2>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <div>
-          <label className="block mb-1 font-medium">Supplier</label>
-          <input
-            type="text"
-            className="w-full border border-gray-300 rounded px-3 py-2"
-            value={newPurchaseOrder.supplier}
-            onChange={(e) => setNewPurchaseOrder(prev => ({
-              ...prev,
-              supplier: e.target.value
-            }))}
-            placeholder="Supplier name"
-          />
-        </div>
-        
-        <div>
-          <label className="block mb-1 font-medium">Order Date</label>
-          <input
-            type="date"
-            className="w-full border border-gray-300 rounded px-3 py-2"
-            value={newPurchaseOrder.order_date}
-            onChange={(e) => setNewPurchaseOrder(prev => ({
-              ...prev,
-              order_date: e.target.value
-            }))}
-          />
-        </div>
-        
-        <div>
-          <label className="block mb-1 font-medium">Expected Delivery</label>
-          <input
-            type="date"
-            className="w-full border border-gray-300 rounded px-3 py-2"
-            value={newPurchaseOrder.expected_delivery}
-            onChange={(e) => setNewPurchaseOrder(prev => ({
-              ...prev,
-              expected_delivery: e.target.value
-            }))}
-          />
-        </div>
-      </div>
-      
-      <div className="mb-4 border-t pt-4">
-        <h3 className="font-semibold mb-2">Order Items</h3>
-        
-        <div className="flex space-x-2 mb-4">
-          <select
-  className="flex-1 border border-gray-300 rounded px-3 py-2"
-  value={poItemProduct}
-  onChange={(e) => setPoItemProduct(e.target.value)}
->
-  <option value="">Select Product</option>
-  {products.map(product => (
-    <option key={product.id} value={product.id}>
-      {product.name} ({product.price ? (product.price / product.quantity).toFixed(2) : 0} KSh/{product.unit})
-    </option>
-  ))}
-</select>
-          
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            className="w-24 border border-gray-300 rounded px-3 py-2"
-            value={poItemQuantity}
-            onChange={(e) => setPoItemQuantity(e.target.value)}
-            placeholder="Qty"
-          />
-          
-          <button
-            onClick={addPoItem}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-          >
-            Add
-          </button>
-        </div>
-        
-        {newPurchaseOrder.items.length > 0 ? (
-          <div className="border rounded">
-            <table className="min-w-full">
-  <thead className="bg-gray-100">
-    <tr>
-      <th className="px-4 py-2 text-left">Item Name</th>
-      <th className="px-4 py-2 text-left">Quantity</th>
-      <th className="px-4 py-2 text-left">Unit Price (KSh)</th>
-      <th className="px-4 py-2 text-left">Total Cost (KSh)</th>
-      <th className="px-4 py-2 text-left">Action</th>
-    </tr>
-  </thead>
-  <tbody>
-    {newPurchaseOrder.items.map((item, index) => (
-      <tr key={index} className="border-b">
-        <td className="px-4 py-2">{item.product_name}</td>
-        <td className="px-4 py-2">{item.quantity} {item.unit}</td>
-        <td className="px-4 py-2">{item.price.toFixed(2)}</td>
-        <td className="px-4 py-2">{(item.price * item.quantity).toFixed(2)}</td>
-        <td className="px-4 py-2">
-          <button
-            onClick={() => removePoItem(index)}
-            className="text-red-600 hover:text-red-800"
-          >
-            Remove
-          </button>
-        </td>
-      </tr>
-    ))}
-  </tbody>
-  <tfoot className="bg-gray-50">
-    <tr>
-      <td colSpan="2" className="px-4 py-2 font-semibold text-right">Total:</td>
-      <td className="px-4 py-2"></td>
-      <td className="px-4 py-2 font-semibold">
-        {newPurchaseOrder.items
-          .reduce((sum, item) => sum + (item.price * item.quantity), 0)
-          .toFixed(2)} KSh
-      </td>
-      <td></td>
-    </tr>
-  </tfoot>
-</table>
+        {/* Purchase Order Modal */}
+        {showPurchaseOrder && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-2xl">
+              <h2 className="text-xl font-semibold mb-4">Create Purchase Order</h2>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block mb-1 font-medium">Supplier</label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded px-3 py-2"
+                    value={newPurchaseOrder.supplier}
+                    onChange={(e) => setNewPurchaseOrder(prev => ({
+                      ...prev,
+                      supplier: e.target.value
+                    }))}
+                    placeholder="Supplier name"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block mb-1 font-medium">Order Date</label>
+                  <input
+                    type="date"
+                    className="w-full border border-gray-300 rounded px-3 py-2"
+                    value={newPurchaseOrder.order_date}
+                    onChange={(e) => setNewPurchaseOrder(prev => ({
+                      ...prev,
+                      order_date: e.target.value
+                    }))}
+                  />
+                </div>
+                
+                <div>
+                  <label className="block mb-1 font-medium">Expected Delivery</label>
+                  <input
+                    type="date"
+                    className="w-full border border-gray-300 rounded px-3 py-2"
+                    value={newPurchaseOrder.expected_delivery}
+                    onChange={(e) => setNewPurchaseOrder(prev => ({
+                      ...prev,
+                      expected_delivery: e.target.value
+                    }))}
+                  />
+                </div>
+              </div>
+              
+              <div className="mb-4 border-t pt-4">
+                <h3 className="font-semibold mb-2">Order Items</h3>
+                
+                <div className="flex space-x-2 mb-4">
+                  <select
+                    className="flex-1 border border-gray-300 rounded px-3 py-2"
+                    value={poItemProduct}
+                    onChange={(e) => setPoItemProduct(e.target.value)}
+                  >
+                    <option value="">Select Product</option>
+                    {products.map(product => (
+                      <option key={product.id} value={product.id}>
+                        {product.name} ({(parseFloat(product.price || 0) / parseFloat(product.quantity || 1)).toFixed(2)} KSh/{product.unit})
+                      </option>
+                    ))}
+                  </select>
+                  
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="w-24 border border-gray-300 rounded px-3 py-2"
+                    value={poItemQuantity}
+                    onChange={(e) => setPoItemQuantity(e.target.value)}
+                    placeholder="Qty"
+                  />
+                  
+                  <button
+                    onClick={addPoItem}
+                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+                  >
+                    Add
+                  </button>
+                </div>
+                
+                {newPurchaseOrder.items.length > 0 ? (
+                  <div className="border rounded">
+                    <table className="min-w-full">
+                      <thead className="bg-gray-100">
+                        <tr>
+                          <th className="px-4 py-2 text-left">Item Name</th>
+                          <th className="px-4 py-2 text-left">Quantity</th>
+                          <th className="px-4 py-2 text-left">Unit Price (KSh)</th>
+                          <th className="px-4 py-2 text-left">Total Cost (KSh)</th>
+                          <th className="px-4 py-2 text-left">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {newPurchaseOrder.items.map((item, index) => (
+                          <tr key={index} className="border-b">
+                            <td className="px-4 py-2">{item.product_name}</td>
+                            <td className="px-4 py-2">{parseFloat(item.quantity || 0).toFixed(2)} {item.unit}</td>
+                            <td className="px-4 py-2">{parseFloat(item.price || 0).toFixed(2)}</td>
+                            <td className="px-4 py-2">{(parseFloat(item.price || 0) * parseFloat(item.quantity || 0)).toFixed(2)}</td>
+                            <td className="px-4 py-2">
+                              <button
+                                onClick={() => removePoItem(index)}
+                                className="text-red-600 hover:text-red-800"
+                              >
+                                Remove
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot className="bg-gray-50">
+                        <tr>
+                          <td colSpan="2" className="px-4 py-2 font-semibold text-right">Total:</td>
+                          <td className="px-4 py-2"></td>
+                          <td className="px-4 py-2 font-semibold">
+                            {newPurchaseOrder.items
+                              .reduce((sum, item) => sum + (parseFloat(item.price || 0) * parseFloat(item.quantity || 0)), 0)
+                              .toFixed(2)} KSh
+                          </td>
+                          <td></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-center py-4">No items added yet</p>
+                )}
+              </div>
+              
+              <div className="flex justify-end space-x-2">
+                <button
+                  onClick={() => setShowPurchaseOrder(false)}
+                  className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={createPurchaseOrder}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
+                >
+                  Create Order
+                </button>
+              </div>
+            </div>
           </div>
-        ) : (
-          <p className="text-gray-500 text-center py-4">No items added yet</p>
         )}
-      </div>
-      
-      <div className="flex justify-end space-x-2">
-        <button
-          onClick={() => setShowPurchaseOrder(false)}
-          className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={createPurchaseOrder}
-          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
-        >
-          Create Order
-        </button>
-      </div>
-    </div>
-  </div>
-)}
     
         {/* Purchase Orders Section */}
         <div className="mb-8 bg-white rounded shadow-md overflow-hidden">
@@ -859,7 +910,7 @@ const Inventory = () => {
                     <td className="px-4 py-2">
                       {order.expected_delivery ? new Date(order.expected_delivery).toLocaleDateString() : 'N/A'}
                     </td>
-                    <td className="px-4 py-2">{order.total_amount?.toFixed(2)} KSh</td>
+                    <td className="px-4 py-2">{parseFloat(order.total_amount || 0).toFixed(2)} KSh</td>
                     <td className="px-4 py-2">
                       <span className={`px-2 py-1 rounded-full text-xs ${
                         order.status === 'received' ? 'bg-green-100 text-green-800' :
@@ -1175,7 +1226,7 @@ const Inventory = () => {
                         </td>
                       ) : (
                         <td className={`px-4 py-2 ${lowStock ? 'text-red-600 font-bold' : ''}`}>
-                          {product.quantity} {product.unit}
+                          {parseFloat(product.quantity || 0).toFixed(2)} {product.unit}
                         </td>
                       )}
                       <td className={`px-4 py-2 ${nearExpiry ? 'text-yellow-600 font-bold' : ''}`}>
@@ -1183,8 +1234,8 @@ const Inventory = () => {
                           ? new Date(product.expiry_date).toLocaleDateString()
                           : 'N/A'}
                       </td>
-                      <td className="px-4 py-2">KSh {product.price?.toLocaleString()}</td>
-                      <td className="px-4 py-2">KSh {product.selling_price?.toLocaleString()}</td>
+                      <td className="px-4 py-2">KSh {parseFloat(product.price || 0).toLocaleString()}</td>
+                      <td className="px-4 py-2">KSh {parseFloat(product.selling_price || 0).toLocaleString()}</td>
                       <td className="px-4 py-2">{product.unit}</td>
                       <td className="px-4 py-2 space-x-2">
                         {!stockTakeMode && (
@@ -1232,7 +1283,7 @@ const Inventory = () => {
                       <div>
                         <h3 className="font-semibold">{product.name}</h3>
                         <p className="text-red-600">
-                          Only {product.quantity} {product.unit} remaining
+                          Only {parseFloat(product.quantity || 0).toFixed(2)} {product.unit} remaining
                         </p>
                         <p className="text-sm text-gray-600">
                           Last updated: {new Date(product.updated_at).toLocaleString()}
@@ -1268,7 +1319,7 @@ const Inventory = () => {
                           Expires on: {new Date(product.expiry_date).toLocaleDateString()}
                         </p>
                         <p className="text-sm text-gray-600">
-                          Quantity: {product.quantity} {product.unit}
+                          Quantity: {parseFloat(product.quantity || 0).toFixed(2)} {product.unit}
                         </p>
                       </div>
                     </div>

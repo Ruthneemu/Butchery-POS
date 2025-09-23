@@ -1,25 +1,25 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient'; // Assuming you have this file for Supabase client
-import Layout from '../components/Layout'; // Your layout component
+import { supabase } from '../supabaseClient';
+import Layout from '../components/Layout';
 
 const Sales = () => {
     // State for order details
     const [customerName, setCustomerName] = useState('');
     const [customerContact, setCustomerContact] = useState('');
-    const [orderType, setOrderType] = useState('pickup'); // Default to pickup
-    const [paymentMethod, setPaymentMethod] = useState('cash'); // Default to cash
+    const [orderType, setOrderType] = useState('pickup');
+    const [paymentMethod, setPaymentMethod] = useState('cash');
     const [orderNotes, setOrderNotes] = useState('');
 
     // State for managing order items
-    const [inventory, setInventory] = useState([]); // To store items fetched from Supabase
-    const [currentOrderItem, setCurrentOrderItem] = useState(''); // Stores the ID of the selected item
-    const [currentOrderQty, setCurrentOrderQty] = useState(0.01); // Default quantity, ensure it's a number
-    const [orderItems, setOrderItems] = useState([]); // Array to hold items added to the current order
+    const [inventory, setInventory] = useState([]);
+    const [currentOrderItem, setCurrentOrderItem] = useState('');
+    const [currentOrderQty, setCurrentOrderQty] = useState(0.01);
+    const [orderItems, setOrderItems] = useState([]);
 
     // UI state
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
-    const [showSuccessMessage, setShowSuccessMessage] = useState(false); // For order placement feedback
+    const [showSuccessMessage, setShowSuccessMessage] = useState(false);
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -39,7 +39,8 @@ const Sales = () => {
                 const parsedInventory = (inventoryData || []).map(item => ({
                     ...item,
                     quantity: parseFloat(item.quantity || 0), // Ensure it's a number, default to 0 if null/undefined
-                    selling_price: parseFloat(item.selling_price || 0), // Ensure it's a number, default to 0 if null/undefined
+                    selling_price: parseFloat(item.selling_price || 0),
+                    price: parseFloat(item.price || 0), // Also ensure price is a number
                 }));
                 setInventory(parsedInventory);
 
@@ -78,17 +79,20 @@ const Sales = () => {
             return;
         }
 
-        // Use the already parsed numerical quantity from the inventory state
-        if (selectedInventoryItem.quantity < currentOrderQty) {
-            alert(`Not enough stock for ${selectedInventoryItem.name}. Available: ${selectedInventoryItem.quantity.toFixed(2)}`);
+        // Ensure we're working with numbers
+        const availableQuantity = parseFloat(selectedInventoryItem.quantity || 0);
+        const orderQuantity = parseFloat(currentOrderQty || 0);
+        
+        if (availableQuantity < orderQuantity) {
+            alert(`Not enough stock for ${selectedInventoryItem.name}. Available: ${availableQuantity.toFixed(2)}`);
             return;
         }
 
         const newItem = {
             id: selectedInventoryItem.id,
             name: selectedInventoryItem.name,
-            price: selectedInventoryItem.selling_price, // Already a number from parsedInventory
-            quantity: parseFloat(currentOrderQty), // Ensure quantity is a number
+            price: parseFloat(selectedInventoryItem.selling_price || 0), // Ensure price is a number
+            quantity: orderQuantity,
         };
 
         setOrderItems(prevItems => {
@@ -97,11 +101,11 @@ const Sales = () => {
 
             if (existingItemIndex > -1) {
                 const updatedItems = [...prevItems];
-                const updatedQty = updatedItems[existingItemIndex].quantity + newItem.quantity;
+                const updatedQty = parseFloat(updatedItems[existingItemIndex].quantity || 0) + orderQuantity;
 
-                if (selectedInventoryItem.quantity < updatedQty) {
+                if (availableQuantity < updatedQty) {
                     alert(`Adding this quantity would exceed available stock for ${selectedInventoryItem.name}.`);
-                    return prevItems; // Don't update if exceeds stock
+                    return prevItems;
                 }
 
                 updatedItems[existingItemIndex].quantity = updatedQty;
@@ -133,7 +137,11 @@ const Sales = () => {
         setLoading(true);
         setError(null);
         try {
-            const orderTotal = orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+            const orderTotal = orderItems.reduce((sum, item) => {
+                const itemPrice = parseFloat(item.price || 0);
+                const itemQuantity = parseFloat(item.quantity || 0);
+                return sum + (itemPrice * itemQuantity);
+            }, 0);
 
             // 1. Insert the new order into the 'orders' table
             const { data: orderData, error: orderError } = await supabase
@@ -146,25 +154,23 @@ const Sales = () => {
                         payment_method: paymentMethod,
                         order_notes: orderNotes,
                         total_amount: orderTotal,
-                        status: 'pending', // Default status
-                        // You might want to add a user_id if orders are linked to specific users
-                        // user_id: (await supabase.auth.getSession()).data.session?.user?.id,
+                        status: 'pending',
                     }
                 ])
-                .select(); // Use .select() to get the inserted data, including the new order ID
+                .select();
 
             if (orderError) {
                 throw orderError;
             }
 
-            const newOrderId = orderData[0].id; // Get the ID of the newly created order
+            const newOrderId = orderData[0].id;
 
             // 2. Prepare order_items for bulk insert
             const orderItemsToInsert = orderItems.map(item => ({
                 order_id: newOrderId,
                 item_id: item.id,
-                quantity: item.quantity,
-                price_at_order: item.price, // Store the price at the time of order
+                quantity: parseFloat(item.quantity || 0),
+                price_at_order: parseFloat(item.price || 0),
             }));
 
             const { error: orderItemsError } = await supabase
@@ -178,9 +184,9 @@ const Sales = () => {
             // 3. Update inventory quantities
             const updates = orderItems.map(async (orderItem) => {
                 const currentStock = inventory.find(inv => inv.id === orderItem.id)?.quantity;
-                // Ensure currentStock is a number, default to 0 if undefined/null
+                // Ensure currentStock is a number
                 const safeCurrentStock = parseFloat(currentStock || 0);
-                const newStock = safeCurrentStock - orderItem.quantity;
+                const newStock = safeCurrentStock - parseFloat(orderItem.quantity || 0);
 
                 const { error: updateError } = await supabase
                     .from('inventory')
@@ -189,11 +195,10 @@ const Sales = () => {
 
                 if (updateError) {
                     console.error(`Failed to update stock for item ${orderItem.name}:`, updateError);
-                    // You might want to throw this error or handle it more gracefully
                 }
             });
 
-            await Promise.all(updates); // Wait for all inventory updates to complete
+            await Promise.all(updates);
 
             alert('Order placed successfully!');
             setShowSuccessMessage(true);
@@ -208,7 +213,6 @@ const Sales = () => {
             setOrderItems([]);
 
             // Re-fetch inventory to reflect updated stock levels
-            // This is crucial after placing an order to show correct stock
             const { data: updatedInventoryData, error: updatedInventoryError } = await supabase
                 .from('inventory')
                 .select('*');
@@ -220,6 +224,7 @@ const Sales = () => {
                     ...item,
                     quantity: parseFloat(item.quantity || 0),
                     selling_price: parseFloat(item.selling_price || 0),
+                    price: parseFloat(item.price || 0),
                 }));
                 setInventory(parsedUpdatedInventory);
             }
@@ -235,6 +240,7 @@ const Sales = () => {
             setLoading(false);
         }
     };
+
     return (
         <Layout>
             <div className="min-h-screen bg-gray-100 p-4 sm:p-6 lg:p-8">
@@ -340,7 +346,7 @@ const Sales = () => {
                                         <option value="">Choose an Item</option>
                                         {inventory.map(item => (
                                             <option key={item.id} value={item.id}>
-                                                {item.name} - KSh {item.selling_price.toFixed(2)}/unit (Stock: {item.quantity.toFixed(2)})
+                                                {item.name} - KSh {parseFloat(item.selling_price || 0).toFixed(2)}/unit (Stock: {parseFloat(item.quantity || 0).toFixed(2)})
                                             </option>
                                         ))}
                                     </select>
@@ -378,7 +384,7 @@ const Sales = () => {
                                             <div>
                                                 <div className="font-medium text-gray-900">{item.name}</div>
                                                 <div className="text-sm text-gray-600">
-                                                    {item.quantity.toFixed(2)} × KSh {item.price.toFixed(2)} = <span className="font-semibold">KSh {(item.quantity * item.price).toFixed(2)}</span>
+                                                    {parseFloat(item.quantity || 0).toFixed(2)} × KSh {parseFloat(item.price || 0).toFixed(2)} = <span className="font-semibold">KSh {(parseFloat(item.quantity || 0) * parseFloat(item.price || 0)).toFixed(2)}</span>
                                                 </div>
                                             </div>
                                             <button
@@ -398,7 +404,11 @@ const Sales = () => {
                                 <div className="flex justify-between font-bold text-xl text-gray-800 mb-4">
                                     <span>Order Total:</span>
                                     <span>
-                                        KSh {orderItems.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2)}
+                                        KSh {orderItems.reduce((sum, item) => {
+                                            const itemPrice = parseFloat(item.price || 0);
+                                            const itemQuantity = parseFloat(item.quantity || 0);
+                                            return sum + (itemPrice * itemQuantity);
+                                        }, 0).toFixed(2)}
                                     </span>
                                 </div>
                                 <button
@@ -420,4 +430,5 @@ const Sales = () => {
         </Layout>
     );
 };
+
 export default Sales;
