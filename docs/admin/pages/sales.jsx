@@ -23,21 +23,21 @@ const Sales = () => {
     const [currentOrderWeight, setCurrentOrderWeight] = useState(0.01);
     const [orderItems, setOrderItems] = useState([]);
     
-    // NEW: Selling method state (by weight or by amount)
+    // Selling method state (by weight or by amount)
     const [sellingMethod, setSellingMethod] = useState('weight'); // 'weight' or 'amount'
     const [targetAmount, setTargetAmount] = useState('');
     const [calculatedWeight, setCalculatedWeight] = useState(0);
     
-    // Weighing scale integration
+    // Weighing scale integration - FIXED to handle properly
     const [scaleConnected, setScaleConnected] = useState(false);
     const [scaleReading, setScaleReading] = useState(0);
     const [useScale, setUseScale] = useState(false);
     const [scalePort, setScalePort] = useState(null);
 
-    // New states for tabs
+    // States for different tabs
     const [transactions, setTransactions] = useState([]);
-    const [orders, setOrders] = useState([]);
     const [loadingTransactions, setLoadingTransactions] = useState(false);
+    const [orders, setOrders] = useState([]);
     const [loadingOrders, setLoadingOrders] = useState(false);
 
     // UI state
@@ -68,20 +68,6 @@ const Sales = () => {
                 }));
                 setInventory(parsedInventory);
 
-                // Fetch business settings
-                const { data: settingsData, error: settingsError } = await supabase
-                    .from('business_settings')
-                    .select('*')
-                    .limit(1);
-
-                if (settingsError) {
-                    throw settingsError;
-                }
-                console.log("Business Settings:", settingsData);
-
-                // Try to connect to weighing scale if available
-                tryConnectToScale();
-
             } catch (err) {
                 console.error("Failed to fetch initial data:", err);
                 setError("Failed to load data: " + err.message);
@@ -93,7 +79,7 @@ const Sales = () => {
         fetchInitialData();
     }, []);
 
-    // NEW: Calculate weight when target amount changes
+    // Calculate weight when target amount changes
     useEffect(() => {
         if (sellingMethod === 'amount' && targetAmount && currentOrderItem) {
             const selectedItem = inventory.find(item => item.id === parseInt(currentOrderItem));
@@ -108,7 +94,7 @@ const Sales = () => {
         }
     }, [targetAmount, currentOrderItem, sellingMethod, inventory]);
 
-    // NEW: Update target amount when scale reading changes (for amount-based selling)
+    // Update target amount when scale reading changes (for amount-based selling)
     useEffect(() => {
         if (sellingMethod === 'amount' && useScale && currentOrderItem && scaleReading > 0) {
             const selectedItem = inventory.find(item => item.id === parseInt(currentOrderItem));
@@ -121,131 +107,232 @@ const Sales = () => {
         }
     }, [scaleReading, sellingMethod, useScale, currentOrderItem, inventory]);
 
-    // Function to simulate connecting to a weighing scale
-    const tryConnectToScale = () => {
+    // FIXED: Proper scale connection handling
+    const checkScaleConnection = async () => {
         if ('serial' in navigator) {
-            console.log("Web Serial API supported");
-            setScaleConnected(true);
-            
-            // Simulate scale readings
-            const interval = setInterval(() => {
-                if (useScale) {
-                    const randomWeight = (Math.random() * 4.9 + 0.1).toFixed(2);
-                    setScaleReading(parseFloat(randomWeight));
-                    if (sellingMethod === 'weight') {
-                        setCurrentOrderWeight(parseFloat(randomWeight));
-                    }
+            try {
+                const ports = await navigator.serial.getPorts();
+                if (ports.length > 0 && ports[0].readable) {
+                    setScaleConnected(true);
+                    setScalePort(ports[0]);
+                    startScaleReading(ports[0]);
+                    return;
                 }
-            }, 2000);
-            
-            return () => clearInterval(interval);
-        } else {
-            console.log("Web Serial API not supported");
-            setScaleConnected(false);
+            } catch (error) {
+                console.log("No previously connected scale found:", error);
+            }
         }
+        // If no scale found or Web Serial not supported, set as disconnected
+        setScaleConnected(false);
+        setScalePort(null);
     };
 
-    // Function to connect to scale via Web Serial API
-    const connectToScale = async () => {
+    // FIXED: Real scale reading function with proper error handling
+    const startScaleReading = async (port) => {
+        if (!port || !port.readable) return;
+        
         try {
-            const port = await navigator.serial.requestPort();
-            await port.open({ baudRate: 9600 });
-            setScalePort(port);
-            setScaleConnected(true);
-            
             const reader = port.readable.getReader();
             
-            while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
-                
-                const textDecoder = new TextDecoder();
-                const scaleData = textDecoder.decode(value);
-                
-                const weightMatch = scaleData.match(/(\d+\.\d+)/);
-                if (weightMatch) {
-                    const weight = parseFloat(weightMatch[1]);
-                    setScaleReading(weight);
-                    if (useScale) {
-                        if (sellingMethod === 'weight') {
+            const readLoop = async () => {
+                try {
+                    const { value, done } = await reader.read();
+                    if (done) {
+                        reader.releaseLock();
+                        return;
+                    }
+                    
+                    const textDecoder = new TextDecoder();
+                    const scaleData = textDecoder.decode(value).trim();
+                    
+                    // Parse common scale data formats
+                    const weightMatch = scaleData.match(/(\d+\.?\d*)\s*kg|(\d+\.?\d*)\s*g/i);
+                    if (weightMatch) {
+                        let weight = parseFloat(weightMatch[1] || weightMatch[2]);
+                        // Convert grams to kg if needed
+                        if (scaleData.toLowerCase().includes('g') && !scaleData.toLowerCase().includes('kg')) {
+                            weight = weight / 1000;
+                        }
+                        setScaleReading(Math.max(0, weight)); // Ensure non-negative
+                        
+                        if (useScale && sellingMethod === 'weight') {
                             setCurrentOrderWeight(weight);
                         }
-                        // For amount-based selling, the useEffect will handle the calculation
                     }
+                    
+                    // Continue reading
+                    setTimeout(readLoop, 100); // Add small delay to prevent overwhelming
+                } catch (error) {
+                    console.error("Error reading from scale:", error);
+                    setScaleConnected(false);
+                    setScalePort(null);
                 }
-            }
+            };
+            
+            readLoop();
         } catch (error) {
-            console.error("Error connecting to scale:", error);
+            console.error("Error starting scale reading:", error);
             setScaleConnected(false);
+            setScalePort(null);
         }
     };
 
-    // Fetch transactions (completed sales)
+    // FIXED: Proper scale connection function with user permission
+    const connectToScale = async () => {
+        if (!('serial' in navigator)) {
+            alert('Web Serial API is not supported in your browser. Please use Chrome, Edge, or Opera with HTTPS.');
+            return;
+        }
+
+        try {
+            // Request user to select a port
+            const port = await navigator.serial.requestPort();
+            await port.open({ 
+                baudRate: 9600,
+                dataBits: 8,
+                stopBits: 1,
+                parity: 'none'
+            });
+            
+            setScalePort(port);
+            setScaleConnected(true);
+            startScaleReading(port);
+            alert('Scale connected successfully!');
+        } catch (error) {
+            console.error("Error connecting to scale:", error);
+            if (error.name === 'NotAllowedError') {
+                alert('Permission denied. Please allow access to the serial port.');
+            } else {
+                alert('Failed to connect to scale. Please check the connection and try again.');
+            }
+            setScaleConnected(false);
+            setScalePort(null);
+        }
+    };
+
+    // Disconnect scale properly
+    const disconnectScale = async () => {
+        if (scalePort) {
+            try {
+                if (scalePort.readable) {
+                    const reader = scalePort.readable.getReader();
+                    await reader.cancel();
+                    reader.releaseLock();
+                }
+                await scalePort.close();
+            } catch (error) {
+                console.error("Error disconnecting scale:", error);
+            }
+        }
+        setScaleConnected(false);
+        setScalePort(null);
+        setScaleReading(0);
+        setUseScale(false);
+    };
+
+    // Check for existing scale connection on component mount
+    useEffect(() => {
+        checkScaleConnection();
+        
+        return () => {
+            // Cleanup on unmount
+            disconnectScale();
+        };
+    }, []);
+
+    // FIXED: Fetch transactions from the correct 'sales' table
     const fetchTransactions = async () => {
         setLoadingTransactions(true);
         try {
             const { data, error } = await supabase
-                .from('orders')
+                .from('sales')
                 .select(`
                     *,
-                    order_items (
-                        *,
-                        inventory (name)
-                    )
+                    inventory!inner(name)
                 `)
-                .in('status', ['confirmed', 'completed'])
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
-            setTransactions(data || []);
+            
+            // Group sales by a transaction identifier or timestamp
+            // Since your sales table doesn't have order_id, we'll group by customer and timestamp
+            const groupedTransactions = {};
+            (data || []).forEach(sale => {
+                const dateKey = new Date(sale.created_at).toISOString().split('T')[0];
+                const customerKey = `${sale.employee_id || 'unknown'}_${dateKey}_${Math.floor(new Date(sale.created_at).getTime() / 60000)}`; // Group by minute
+                
+                if (!groupedTransactions[customerKey]) {
+                    groupedTransactions[customerKey] = {
+                        id: customerKey,
+                        customer_name: `Customer ${sale.employee_id || 'Unknown'}`,
+                        created_at: sale.created_at,
+                        order_items: [],
+                        total_amount: 0,
+                        payment_method: 'cash' // Default since not stored
+                    };
+                }
+                
+                groupedTransactions[customerKey].order_items.push({
+                    name: sale.inventory?.name || 'Unknown Item',
+                    quantity: sale.quantity,
+                    price: sale.price,
+                    total: sale.total
+                });
+                groupedTransactions[customerKey].total_amount += parseFloat(sale.total || 0);
+            });
+
+            setTransactions(Object.values(groupedTransactions));
         } catch (err) {
             console.error('Error fetching transactions:', err);
+            setError('Error fetching transactions: ' + err.message);
         } finally {
             setLoadingTransactions(false);
         }
     };
 
-    // Fetch orders for management
+    // FIXED: Create a simple order management system using sales data
     const fetchOrders = async () => {
         setLoadingOrders(true);
         try {
+            // Since we don't have an orders table, we'll create mock orders from recent sales
+            // In a real system, you'd want to create proper orders table
             const { data, error } = await supabase
-                .from('orders')
+                .from('sales')
                 .select(`
                     *,
-                    order_items (
-                        *,
-                        inventory (name)
-                    )
+                    inventory!inner(name)
                 `)
-                .order('created_at', { ascending: false });
+                .order('created_at', { ascending: false })
+                .limit(20);
 
             if (error) throw error;
-            setOrders(data || []);
+            
+            // Convert sales to mock orders
+            const mockOrders = (data || []).map(sale => ({
+                id: sale.id,
+                customer_name: `Customer ${sale.employee_id || 'Unknown'}`,
+                created_at: sale.created_at,
+                total_amount: parseFloat(sale.total || 0),
+                status: 'delivered', // Since these are completed sales
+                order_items: [{
+                    name: sale.inventory?.name || 'Unknown Item',
+                    quantity: sale.quantity,
+                    total: sale.total
+                }]
+            }));
+
+            setOrders(mockOrders);
         } catch (err) {
             console.error('Error fetching orders:', err);
+            setError('Error fetching orders: ' + err.message);
         } finally {
             setLoadingOrders(false);
         }
     };
 
-    // Update order status
+    // Mock function for updating order status (since we don't have orders table)
     const updateOrderStatus = async (orderId, newStatus) => {
-        try {
-            const { error } = await supabase
-                .from('orders')
-                .update({ status: newStatus })
-                .eq('id', orderId);
-
-            if (error) throw error;
-            
-            // Refresh orders list
-            fetchOrders();
-            alert(`Order status updated to ${newStatus}`);
-        } catch (err) {
-            console.error('Error updating order status:', err);
-            alert('Failed to update order status');
-        }
+        alert(`Order #${orderId} status would be updated to ${newStatus}. This requires an orders table to implement properly.`);
     };
 
     // Load data when tabs are switched
@@ -285,7 +372,7 @@ const Sales = () => {
             weight: parseFloat(currentOrderWeight),
             total_price: totalPrice,
             unit: 'kg',
-            selling_method: sellingMethod // Track how this item was sold
+            selling_method: sellingMethod
         };
 
         setOrderItems(prevItems => {
@@ -314,6 +401,7 @@ const Sales = () => {
         setTargetAmount('');
         setCalculatedWeight(0);
         setSellingMethod('weight');
+        setUseScale(false);
     };
 
     const removeItemFromOrder = (indexToRemove) => {
@@ -339,9 +427,8 @@ const Sales = () => {
 
     // Check if payment is sufficient
     const isPaymentSufficient = amountPaid && parseFloat(amountPaid) >= orderTotal;
-    const paymentStatus = !amountPaid ? 'pending' : 
-                         isPaymentSufficient ? 'paid' : 'partial';
 
+    // FIXED: Place order using the correct 'sales' table structure
     const placeOrder = async () => {
         if (orderItems.length === 0) {
             alert('Cannot place an empty order.');
@@ -363,50 +450,29 @@ const Sales = () => {
         setLoading(true);
         setError(null);
         try {
-            // 1. Insert the new order into the 'orders' table
-            const { data: orderData, error: orderError } = await supabase
-                .from('orders')
-                .insert([{
-                    customer_name: customerName,
-                    customer_contact: customerContact,
-                    order_type: orderType,
-                    payment_method: paymentMethod,
-                    order_notes: orderNotes,
-                    total_amount: orderTotal,
-                    amount_paid: parseFloat(amountPaid),
-                    change: parseFloat(change.toFixed(2)),
-                    payment_status: paymentStatus,
-                    status: 'confirmed',
-                }])
-                .select();
-
-            if (orderError) {
-                throw orderError;
-            }
-
-            const newOrderId = orderData[0].id;
-
-            // 2. Prepare order_items for bulk insert
-            const orderItemsToInsert = orderItems.map(item => ({
-                order_id: newOrderId,
+            // Insert each item as a separate sale record
+            const salesRecords = orderItems.map(item => ({
                 item_id: item.id,
+                item_name: item.name,
                 quantity: item.weight,
-                price_at_order: item.price_per_kg,
+                price: item.price_per_kg,
+                total: item.total_price,
+                employee_id: 1 // You may want to get this from user session
             }));
 
-            const { error: orderItemsError } = await supabase
-                .from('order_items')
-                .insert(orderItemsToInsert);
+            const { error: salesError } = await supabase
+                .from('sales')
+                .insert(salesRecords);
 
-            if (orderItemsError) {
-                throw orderItemsError;
+            if (salesError) {
+                throw salesError;
             }
 
-            // 3. Update inventory quantities
+            // Update inventory quantities
             const updates = orderItems.map(async (orderItem) => {
                 const currentStock = inventory.find(inv => inv.id === orderItem.id)?.quantity;
                 const safeCurrentStock = parseFloat(currentStock || 0);
-                const newStock = safeCurrentStock - orderItem.weight;
+                const newStock = Math.max(0, safeCurrentStock - orderItem.weight); // Ensure non-negative stock
 
                 const { error: updateError } = await supabase
                     .from('inventory')
@@ -415,12 +481,13 @@ const Sales = () => {
 
                 if (updateError) {
                     console.error(`Failed to update stock for item ${orderItem.name}:`, updateError);
+                    throw updateError;
                 }
             });
 
             await Promise.all(updates);
 
-            const successMessage = `Order placed successfully!\nTotal: KSh ${orderTotal.toFixed(2)}\nPaid: KSh ${parseFloat(amountPaid).toFixed(2)}\nChange: KSh ${change.toFixed(2)}`;
+            const successMessage = `Order placed successfully!\nCustomer: ${customerName}\nTotal: KSh ${orderTotal.toFixed(2)}\nPaid: KSh ${parseFloat(amountPaid).toFixed(2)}\nChange: KSh ${change.toFixed(2)}`;
             alert(successMessage);
             setShowSuccessMessage(true);
             
@@ -438,6 +505,7 @@ const Sales = () => {
             setTargetAmount('');
             setCalculatedWeight(0);
             setSellingMethod('weight');
+            setUseScale(false);
 
             // Re-fetch inventory
             const { data: updatedInventoryData, error: updatedInventoryError } = await supabase
@@ -469,14 +537,14 @@ const Sales = () => {
 
     // Function to capture weight from scale
     const captureWeightFromScale = () => {
-        if (scaleConnected) {
+        if (scaleConnected && scaleReading > 0) {
             setUseScale(true);
             if (sellingMethod === 'weight') {
                 setCurrentOrderWeight(scaleReading);
             }
-            // For amount-based selling, the weight will be captured automatically via useEffect
+            alert(`Weight captured: ${scaleReading.toFixed(3)} kg`);
         } else {
-            alert('Weighing scale is not connected. Please enter weight manually.');
+            alert('Weighing scale is not connected or no weight detected. Please check the scale and try again.');
         }
     };
 
@@ -510,7 +578,7 @@ const Sales = () => {
                 {/* Tab Content */}
                 {activeTab === 'newOrder' && (
                     <div>
-                        {/* Scale Status */}
+                        {/* Scale Status - FIXED */}
                         <div className="mb-6 bg-white p-4 rounded-lg shadow">
                             <div className="flex flex-wrap items-center justify-between">
                                 <div className="flex items-center">
@@ -520,33 +588,40 @@ const Sales = () => {
                                     </span>
                                     {scaleConnected && (
                                         <span className="ml-4 bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">
-                                            Current Reading: {scaleReading.toFixed(2)} kg
+                                            Current Reading: {scaleReading.toFixed(3)} kg
                                         </span>
                                     )}
                                 </div>
                                 <div className="flex space-x-2 mt-2 sm:mt-0">
-                                    {!scaleConnected && (
+                                    {!scaleConnected ? (
                                         <button
                                             onClick={connectToScale}
                                             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm"
                                         >
                                             Connect Scale
                                         </button>
-                                    )}
-                                    {scaleConnected && (
-                                        <button
-                                            onClick={captureWeightFromScale}
-                                            className={`px-4 py-2 rounded text-sm ${useScale ? 'bg-green-600 text-white' : 'bg-gray-200 hover:bg-gray-300'}`}
-                                        >
-                                            Use Scale Reading
-                                        </button>
+                                    ) : (
+                                        <>
+                                            <button
+                                                onClick={captureWeightFromScale}
+                                                className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded text-sm"
+                                            >
+                                                Capture Weight
+                                            </button>
+                                            <button
+                                                onClick={disconnectScale}
+                                                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded text-sm"
+                                            >
+                                                Disconnect
+                                            </button>
+                                        </>
                                     )}
                                 </div>
                             </div>
                         </div>
 
                         {loading && (
-                            <div className="text-center text-indigo-600 text-lg">Loading inventory and settings...</div>
+                            <div className="text-center text-indigo-600 text-lg">Loading inventory...</div>
                         )}
 
                         {error && (
@@ -559,11 +634,11 @@ const Sales = () => {
                         {showSuccessMessage && (
                             <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-4" role="alert">
                                 <strong className="font-bold">Success!</strong>
-                                <span className="block sm:inline"> Order placed successfully! 🎉</span>
+                                <span className="block sm:inline"> Order placed successfully!</span>
                             </div>
                         )}
 
-                        {!loading && !error && (
+                        {!loading && (
                             <div className="max-w-4xl mx-auto bg-white p-6 rounded-xl shadow-lg grid grid-cols-1 md:grid-cols-2 gap-8">
                                 {/* Customer & Order Details */}
                                 <div className="space-y-5 p-4 bg-gray-50 rounded-lg shadow-inner">
@@ -599,8 +674,8 @@ const Sales = () => {
                                             value={orderType}
                                             onChange={(e) => setOrderType(e.target.value)}
                                         >
-                                            <option value="pickup">Pickup 🚶</option>
-                                            <option value="delivery">Delivery 🚚</option>
+                                            <option value="pickup">Pickup</option>
+                                            <option value="delivery">Delivery</option>
                                         </select>
                                     </div>
                                     <div>
@@ -611,9 +686,9 @@ const Sales = () => {
                                             value={paymentMethod}
                                             onChange={(e) => setPaymentMethod(e.target.value)}
                                         >
-                                            <option value="cash">Cash 💵</option>
-                                            <option value="mpesa">M-Pesa 📱</option>
-                                            <option value="card">Card 💳</option>
+                                            <option value="cash">Cash</option>
+                                            <option value="mpesa">M-Pesa</option>
+                                            <option value="card">Card</option>
                                         </select>
                                     </div>
                                     <div>
@@ -624,7 +699,7 @@ const Sales = () => {
                                             rows="3"
                                             value={orderNotes}
                                             onChange={(e) => setOrderNotes(e.target.value)}
-                                            placeholder="Any special instructions or preferences..."
+                                            placeholder="Any special instructions..."
                                         />
                                     </div>
                                 </div>
@@ -873,7 +948,7 @@ const Sales = () => {
                                 <table className="min-w-full divide-y divide-gray-200">
                                     <thead className="bg-gray-50">
                                         <tr>
-                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order ID</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Transaction ID</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
                                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
@@ -930,7 +1005,7 @@ const Sales = () => {
                     <div className="bg-white rounded-lg shadow">
                         <div className="p-4 border-b border-gray-200">
                             <h2 className="text-xl font-semibold text-gray-800">Order Management</h2>
-                            <p className="text-sm text-gray-600">Track and manage order statuses</p>
+                            <p className="text-sm text-gray-600">Track and manage order statuses (Note: This is simulated using sales data)</p>
                         </div>
                         
                         <div className="overflow-x-auto">
