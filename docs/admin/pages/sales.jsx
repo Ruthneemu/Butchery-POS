@@ -1,7 +1,3 @@
-
-
-Share Session
-
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient'; // Assuming you have this file for Supabase client
 import Layout from '../components/Layout'; // Your layout component
