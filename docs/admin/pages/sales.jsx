@@ -33,6 +33,7 @@ const Sales = () => {
     const [scaleReading, setScaleReading] = useState(0);
     const [useScale, setUseScale] = useState(false);
     const [scalePort, setScalePort] = useState(null);
+    const [scaleError, setScaleError] = useState(null);
 
     // States for different tabs
     const [transactions, setTransactions] = useState([]);
@@ -44,6 +45,7 @@ const Sales = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [showSuccessMessage, setShowSuccessMessage] = useState(false);
+    const [user, setUser] = useState(null);
 
     // Mock inventory names for display purposes
     const inventoryNames = {
@@ -59,6 +61,11 @@ const Sales = () => {
             setLoading(true);
             setError(null);
             try {
+                // Get current user
+                const { data: { user }, error: userError } = await supabase.auth.getUser();
+                if (userError) throw userError;
+                setUser(user);
+                
                 // Fetch inventory items
                 const { data: inventoryData, error: inventoryError } = await supabase
                     .from('inventory')
@@ -119,6 +126,7 @@ const Sales = () => {
     }, [scaleReading, sellingMethod, useScale, currentOrderItem, inventory]);
 
     const checkScaleConnection = async () => {
+        setScaleError(null);
         if ('serial' in navigator) {
             try {
                 const ports = await navigator.serial.getPorts();
@@ -130,7 +138,10 @@ const Sales = () => {
                 }
             } catch (error) {
                 console.log("No previously connected scale found:", error);
+                setScaleError("No previously connected scale found");
             }
+        } else {
+            setScaleError("Web Serial API is not supported in your browser");
         }
         setScaleConnected(false);
         setScalePort(null);
@@ -172,6 +183,7 @@ const Sales = () => {
                     setTimeout(readLoop, 100);
                 } catch (error) {
                     console.error("Error reading from scale:", error);
+                    setScaleError("Error reading from scale: " + error.message);
                     setScaleConnected(false);
                     setScalePort(null);
                 }
@@ -180,14 +192,16 @@ const Sales = () => {
             readLoop();
         } catch (error) {
             console.error("Error starting scale reading:", error);
+            setScaleError("Error starting scale reading: " + error.message);
             setScaleConnected(false);
             setScalePort(null);
         }
     };
 
     const connectToScale = async () => {
+        setScaleError(null);
         if (!('serial' in navigator)) {
-            alert('Web Serial API is not supported in your browser. Please use Chrome, Edge, or Opera with HTTPS.');
+            setScaleError('Web Serial API is not supported in your browser. Please use Chrome, Edge, or Opera with HTTPS.');
             return;
         }
 
@@ -207,9 +221,9 @@ const Sales = () => {
         } catch (error) {
             console.error("Error connecting to scale:", error);
             if (error.name === 'NotAllowedError') {
-                alert('Permission denied. Please allow access to the serial port.');
+                setScaleError('Permission denied. Please allow access to the serial port.');
             } else {
-                alert('Failed to connect to scale. Please check the connection and try again.');
+                setScaleError('Failed to connect to scale. Please check the connection and try again.');
             }
             setScaleConnected(false);
             setScalePort(null);
@@ -439,11 +453,17 @@ const Sales = () => {
         setLoading(true);
         setError(null);
         try {
+            // Get current user
+            const { data: { user }, error: userError } = await supabase.auth.getUser();
+            if (userError || !user) {
+                throw new Error("User not authenticated. Please log in to place orders.");
+            }
+
             // Insert each item as a separate sale record using only the columns that exist in the database
             const salesRecords = orderItems.map(item => ({
                 price: item.price_per_kg,
                 total: item.total_price,
-                employee_id: 1, // You may want to get this from user session
+                employee_id: user.id, // Use actual user UUID instead of hardcoded "1"
                 payment_method: paymentMethod
                 // Note: item_id, item_name, and quantity don't exist in the sales table
             }));
@@ -590,6 +610,11 @@ const Sales = () => {
                                     )}
                                 </div>
                             </div>
+                            {scaleError && (
+                                <div className="mt-2 text-red-600 text-sm">
+                                    {scaleError}
+                                </div>
+                            )}
                         </div>
 
                         {loading && (
