@@ -356,9 +356,10 @@ const Sales = () => {
             const { error: salesError } = await supabase
                 .from('sales')
                 .insert([{
+                    item_id: selectedItem.id,
                     price: pricePerKg,
                     total: saleTotal,
-                    employee_id: user.id,
+                    item_id: selectedItem.id,
                     payment_method: 'cash' // Default payment method for quick sales
                 }]);
 
@@ -432,12 +433,12 @@ const Sales = () => {
             const groupedTransactions = {};
             (data || []).forEach(sale => {
                 const dateKey = new Date(sale.created_at).toISOString().split('T')[0];
-                const customerKey = `${sale.employee_id || 'unknown'}_${dateKey}_${Math.floor(new Date(sale.created_at).getTime() / 60000)}`;
+                const customerKey = `${dateKey}_${sale.id}_${Math.floor(new Date(sale.created_at).getTime() / 60000)}`;
                 
                 if (!groupedTransactions[customerKey]) {
                     groupedTransactions[customerKey] = {
                         id: customerKey,
-                        customer_name: `Customer ${sale.employee_id || 'Unknown'}`,
+                        customer_name: `Sale #${sale.id}`,
                         created_at: sale.created_at,
                         order_items: [],
                         total_amount: 0,
@@ -479,7 +480,7 @@ const Sales = () => {
             
             const mockOrders = (data || []).map(sale => ({
                 id: sale.id,
-                customer_name: `Customer ${sale.employee_id || 'Unknown'}`,
+                customer_name: `Sale #${sale.id}`,
                 created_at: sale.created_at,
                 total_amount: parseFloat(sale.total || 0),
                 status: 'delivered',
@@ -624,7 +625,7 @@ const Sales = () => {
             const salesRecords = orderItems.map(item => ({
                 price: item.price_per_kg,
                 total: item.total_price,
-                employee_id: user.id, // Use actual user UUID instead of hardcoded "1"
+                item_id: item.id, // Use actual user UUID instead of hardcoded "1"
                 payment_method: paymentMethod
                 // Note: item_id, item_name, and quantity don't exist in the sales table
             }));

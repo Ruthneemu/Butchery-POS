@@ -13,13 +13,11 @@ import { useAuth } from './hooks/useAuth';
 
 import Dashboard from './pages/dashboard';
 import Inventory from './pages/inventory';
-import Reports from './pages/reports';
 import Sales from './pages/sales';
 import Register from './pages/register';
 import Settings from './pages/settings';
 import Login from './pages/login';
 import Payment from './pages/payment';  
-import Employee from './pages/employee';
 import Customer from './pages/customer';
 import Layout from './components/layout';
 
@@ -62,14 +60,7 @@ const App = () => {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/reports"
-          element={
-            <ProtectedRoute>
-              <Reports />
-            </ProtectedRoute>
-          }
-        />
+       
         <Route
           path="/sales"
           element={
@@ -86,14 +77,7 @@ const App = () => {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/employee"
-          element={
-            <ProtectedRoute>
-              <Employee />
-            </ProtectedRoute>
-          }
-        />
+       
         <Route
           path="/customer"
           element={
