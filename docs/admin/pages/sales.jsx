@@ -268,22 +268,25 @@ const Sales = () => {
     const fetchSalesData = async () => {
         setLoadingSales(true);
         try {
-            // Fetch sales data with inventory details joined
-            const { data, error } = await supabase
+            // Fetch sales data
+            const { data: salesData, error: salesError } = await supabase
                 .from('sales')
-                .select(`
-                    *,
-                    inventory:item_id (name)
-                `)
+                .select('*')
                 .order('created_at', { ascending: false });
 
-            if (error) throw error;
+            if (salesError) throw salesError;
             
-            setSalesData(data || []);
-            setFilteredSales(data || []);
+            // Enhance sales data with product names
+            const enhancedSalesData = (salesData || []).map(sale => ({
+                ...sale,
+                inventory: { name: getProductName(sale.item_id) }
+            }));
+            
+            setSalesData(enhancedSalesData);
+            setFilteredSales(enhancedSalesData);
             
             // Calculate total sales
-            const total = (data || []).reduce((sum, sale) => sum + parseFloat(sale.total || 0), 0);
+            const total = (enhancedSalesData || []).reduce((sum, sale) => sum + parseFloat(sale.total || 0), 0);
             setTotalSales(total);
         } catch (err) {
             console.error('Error fetching sales data:', err);
@@ -422,20 +425,17 @@ const Sales = () => {
     const fetchTransactions = async () => {
         setLoadingTransactions(true);
         try {
-            // Fetch sales data with inventory details joined
-            const { data, error } = await supabase
+            // Fetch sales data
+            const { data: salesData, error: salesError } = await supabase
                 .from('sales')
-                .select(`
-                    *,
-                    inventory:item_id (name)
-                `)
+                .select('*')
                 .order('created_at', { ascending: false });
 
-            if (error) throw error;
+            if (salesError) throw salesError;
             
             // Group sales by employee_id and date
             const groupedTransactions = {};
-            (data || []).forEach(sale => {
+            (salesData || []).forEach(sale => {
                 const dateKey = new Date(sale.created_at).toISOString().split('T')[0];
                 const customerKey = `${dateKey}_${sale.id}_${Math.floor(new Date(sale.created_at).getTime() / 60000)}`;
                 
@@ -450,8 +450,8 @@ const Sales = () => {
                     };
                 }
                 
-                // Get item name from joined data
-                const itemName = sale.inventory?.name || getProductName(sale.item_id);
+                // Get item name from inventory
+                const itemName = getProductName(sale.item_id);
                 
                 groupedTransactions[customerKey].order_items.push({
                     name: itemName,
@@ -474,19 +474,16 @@ const Sales = () => {
     const fetchOrders = async () => {
         setLoadingOrders(true);
         try {
-            // Fetch sales data with inventory details joined
-            const { data, error } = await supabase
+            // Fetch sales data
+            const { data: salesData, error: salesError } = await supabase
                 .from('sales')
-                .select(`
-                    *,
-                    inventory:item_id (name)
-                `)
+                .select('*')
                 .order('created_at', { ascending: false })
                 .limit(20);
 
-            if (error) throw error;
+            if (salesError) throw salesError;
             
-            const mockOrders = (data || []).map(sale => ({
+            const mockOrders = (salesData || []).map(sale => ({
                 id: sale.id,
                 customer_name: `Sale #${sale.id}`,
                 created_at: sale.created_at,
@@ -494,7 +491,7 @@ const Sales = () => {
                 status: 'delivered',
                 payment_method: sale.payment_method || 'cash',
                 order_items: [{
-                    name: sale.inventory?.name || getProductName(sale.item_id),
+                    name: getProductName(sale.item_id),
                     quantity: sale.quantity || 1,
                     total: sale.total
                 }]
