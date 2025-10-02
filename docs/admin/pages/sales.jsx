@@ -58,13 +58,10 @@ const Sales = () => {
     const [showSuccessMessage, setShowSuccessMessage] = useState(false);
     const [user, setUser] = useState(null);
 
-    // Mock inventory names for display purposes
-    const inventoryNames = {
-        1: "Beef",
-        2: "Chicken",
-        3: "Mutton",
-        4: "Pork",
-        5: "Fish"
+    // Helper function to get product name by ID
+    const getProductName = (itemId) => {
+        const product = inventory.find(item => item.id === itemId);
+        return product ? product.name : `Unknown Product (${itemId})`;
     };
 
     useEffect(() => {
@@ -77,7 +74,7 @@ const Sales = () => {
                 if (userError) throw userError;
                 setUser(user);
                 
-                // Fetch inventory items
+                // Fetch inventory items with actual names from database
                 const { data: inventoryData, error: inventoryError } = await supabase
                     .from('inventory')
                     .select('*');
@@ -86,12 +83,11 @@ const Sales = () => {
                     throw inventoryError;
                 }
 
-                // Since there's no quantity column in the database, we'll add a mock one
-                // In a real application, you should add this column to your database
+                // Process inventory data with real values
                 const parsedInventory = (inventoryData || []).map(item => ({
                     ...item,
-                    name: inventoryNames[item.id] || `Product ${item.id}`,
-                    quantity: 100, // Mock quantity since it doesn't exist in the database
+                    name: item.name || `Product ${item.id}`, // Use actual name from database
+                    quantity: item.quantity || 0, // Use actual quantity from database
                     selling_price: parseFloat(item.selling_price || 0),
                     price_per_kg: parseFloat(item.selling_price || 0),
                 }));
@@ -272,9 +268,13 @@ const Sales = () => {
     const fetchSalesData = async () => {
         setLoadingSales(true);
         try {
+            // Fetch sales data with inventory details joined
             const { data, error } = await supabase
                 .from('sales')
-                .select('*')
+                .select(`
+                    *,
+                    inventory:item_id (name)
+                `)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -359,7 +359,7 @@ const Sales = () => {
                     item_id: selectedItem.id,
                     price: pricePerKg,
                     total: saleTotal,
-                    item_id: selectedItem.id,
+                    quantity: saleWeight,
                     payment_method: 'cash' // Default payment method for quick sales
                 }]);
 
@@ -395,7 +395,7 @@ const Sales = () => {
             headers.join(','),
             ...filteredSales.map(sale => [
                 sale.id,
-                inventoryNames[sale.item_id] || `Product ${sale.item_id || 'Unknown'}`,
+                sale.inventory?.name || getProductName(sale.item_id),
                 (sale.quantity || 1).toFixed(2),
                 sale.price.toFixed(2),
                 sale.total.toFixed(2),
@@ -422,9 +422,13 @@ const Sales = () => {
     const fetchTransactions = async () => {
         setLoadingTransactions(true);
         try {
+            // Fetch sales data with inventory details joined
             const { data, error } = await supabase
                 .from('sales')
-                .select('*')
+                .select(`
+                    *,
+                    inventory:item_id (name)
+                `)
                 .order('created_at', { ascending: false });
 
             if (error) throw error;
@@ -446,12 +450,12 @@ const Sales = () => {
                     };
                 }
                 
-                // Get item name from our mock mapping
-                const itemName = inventoryNames[sale.item_id] || `Product ${sale.item_id || 'Unknown'}`;
+                // Get item name from joined data
+                const itemName = sale.inventory?.name || getProductName(sale.item_id);
                 
                 groupedTransactions[customerKey].order_items.push({
                     name: itemName,
-                    quantity: sale.quantity || 1, // Since there's no quantity in sales table
+                    quantity: sale.quantity || 1,
                     price: sale.price,
                     total: sale.total
                 });
@@ -470,9 +474,13 @@ const Sales = () => {
     const fetchOrders = async () => {
         setLoadingOrders(true);
         try {
+            // Fetch sales data with inventory details joined
             const { data, error } = await supabase
                 .from('sales')
-                .select('*')
+                .select(`
+                    *,
+                    inventory:item_id (name)
+                `)
                 .order('created_at', { ascending: false })
                 .limit(20);
 
@@ -486,7 +494,7 @@ const Sales = () => {
                 status: 'delivered',
                 payment_method: sale.payment_method || 'cash',
                 order_items: [{
-                    name: inventoryNames[sale.item_id] || `Product ${sale.item_id || 'Unknown'}`,
+                    name: sale.inventory?.name || getProductName(sale.item_id),
                     quantity: sale.quantity || 1,
                     total: sale.total
                 }]
@@ -621,13 +629,13 @@ const Sales = () => {
                 throw new Error("User not authenticated. Please log in to place orders.");
             }
 
-            // Insert each item as a separate sale record using only the columns that exist in the database
+            // Insert each item as a separate sale record
             const salesRecords = orderItems.map(item => ({
                 price: item.price_per_kg,
                 total: item.total_price,
-                item_id: item.id, // Use actual user UUID instead of hardcoded "1"
+                item_id: item.id,
+                quantity: item.weight,
                 payment_method: paymentMethod
-                // Note: item_id, item_name, and quantity don't exist in the sales table
             }));
 
             const { error: salesError } = await supabase
@@ -638,8 +646,17 @@ const Sales = () => {
                 throw salesError;
             }
 
-            // Note: We can't update inventory quantities because there's no quantity column
-            // In a real application, you should add this column to your database
+            // Update inventory quantities
+            for (const item of orderItems) {
+                const inventoryItem = inventory.find(i => i.id === item.id);
+                if (inventoryItem) {
+                    const newQuantity = inventoryItem.quantity - item.weight;
+                    await supabase
+                        .from('inventory')
+                        .update({ quantity: newQuantity })
+                        .eq('id', item.id);
+                }
+            }
 
             const successMessage = `Order placed successfully!\nCustomer: ${customerName}\nTotal: KSh ${orderTotal.toFixed(2)}\nPaid: KSh ${parseFloat(amountPaid).toFixed(2)}\nChange: KSh ${change.toFixed(2)}`;
             alert(successMessage);
@@ -671,8 +688,8 @@ const Sales = () => {
             } else {
                 const parsedUpdatedInventory = (updatedInventoryData || []).map(item => ({
                     ...item,
-                    name: inventoryNames[item.id] || `Product ${item.id}`,
-                    quantity: 100, // Mock quantity since it doesn't exist in the database
+                    name: item.name || `Product ${item.id}`,
+                    quantity: item.quantity || 0,
                     selling_price: parseFloat(item.selling_price || 0),
                     price_per_kg: parseFloat(item.selling_price || 0),
                 }));
@@ -908,7 +925,7 @@ const Sales = () => {
                                                     #{sale.id}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                    {inventoryNames[sale.item_id] || `Product ${sale.item_id || 'Unknown'}`}
+                                                    {sale.inventory?.name || getProductName(sale.item_id)}
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                                     {(sale.quantity || 1).toFixed(2)}
