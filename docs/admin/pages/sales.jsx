@@ -719,8 +719,6 @@ const Sales = () => {
     return (
         <Layout>
             <div className="min-h-screen bg-gray-100 p-4 sm:p-6 lg:p-8">
-                <h1 className="text-3xl font-bold text-gray-900 mb-8 text-center">Sales Management</h1>
-
                 {/* Tab Navigation - Reordered as requested */}
                 <div className="flex border-b border-gray-200 mb-6">
                     <button
