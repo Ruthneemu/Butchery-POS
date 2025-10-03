@@ -4,22 +4,17 @@ import supabase from '../supabaseClient';
 import Layout from '../components/layout';
 import { toast, ToastContainer } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import { FiUser, FiMail, FiLock, FiBell, FiBriefcase, FiKey, FiAlertCircle, FiLogOut, FiSave, FiEdit, FiTrash2, FiRefreshCcw } from 'react-icons/fi';
+import { FiUser, FiMail, FiLock, FiBell, FiBriefcase, FiKey, FiAlertCircle, FiLogOut, FiSave, FiEdit, FiTrash2, FiRefreshCcw, FiShield, FiEye, FiEyeOff } from 'react-icons/fi';
 
 // --- START: ConfirmationModal Component Definition ---
-// This is your Modal component, given the name ConfirmationModal
 function ConfirmationModal({ isOpen, onClose, title, children }) {
-  if (!isOpen) return null; // Don't render anything if not open
+  if (!isOpen) return null;
 
   return (
-    // Backdrop for the modal
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex justify-center items-center z-50">
-      {/* Modal content area */}
       <div className="relative p-6 bg-white rounded-lg shadow-xl max-w-sm mx-auto">
-        {/* Modal Header */}
         <div className="flex justify-between items-center mb-4 border-b pb-3">
           <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
-          {/* Close button */}
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700 focus:outline-none"
@@ -30,7 +25,6 @@ function ConfirmationModal({ isOpen, onClose, title, children }) {
             </svg>
           </button>
         </div>
-        {/* Modal Body (children) */}
         <div>
           {children}
         </div>
@@ -40,26 +34,87 @@ function ConfirmationModal({ isOpen, onClose, title, children }) {
 }
 // --- END: ConfirmationModal Component Definition ---
 
+// Password strength indicator component
+function PasswordStrengthIndicator({ password }) {
+  const calculateStrength = (password) => {
+    if (!password) return 0;
+    
+    let strength = 0;
+    
+    // Length check
+    if (password.length >= 8) strength += 25;
+    if (password.length >= 12) strength += 15;
+    
+    // Complexity checks
+    if (/[A-Z]/.test(password)) strength += 15; // Uppercase letters
+    if (/[a-z]/.test(password)) strength += 10; // Lowercase letters
+    if (/[0-9]/.test(password)) strength += 15; // Numbers
+    if (/[^A-Za-z0-9]/.test(password)) strength += 20; // Special characters
+    
+    return Math.min(strength, 100);
+  };
+
+  const getStrengthLabel = (strength) => {
+    if (strength === 0) return '';
+    if (strength < 30) return 'Weak';
+    if (strength < 70) return 'Medium';
+    return 'Strong';
+  };
+
+  const getStrengthColor = (strength) => {
+    if (strength < 30) return 'bg-red-500';
+    if (strength < 70) return 'bg-yellow-500';
+    return 'bg-green-500';
+  };
+
+  const strength = calculateStrength(password);
+  const label = getStrengthLabel(strength);
+  const color = getStrengthColor(strength);
+
+  return (
+    <div className="mt-2">
+      <div className="flex justify-between text-sm mb-1">
+        <span>Password strength:</span>
+        <span className={`font-medium ${strength < 30 ? 'text-red-500' : strength < 70 ? 'text-yellow-500' : 'text-green-500'}`}>
+          {label}
+        </span>
+      </div>
+      <div className="w-full bg-gray-200 rounded-full h-2">
+        <div 
+          className={`h-2 rounded-full ${color} transition-all duration-300`} 
+          style={{ width: `${strength}%` }}
+        ></div>
+      </div>
+      <div className="mt-2 text-xs text-gray-500">
+        Use 8+ characters with uppercase, lowercase, numbers & symbols
+      </div>
+    </div>
+  );
+}
 
 export default function Settings() {
-  // 'user' state will hold the authenticated user object, not a specific user's data.
+  // 'user' state will hold the authenticated user object
   const [user, setUser] = useState(null);
   const [email, setEmail] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newPassword, setNewPassword] = useState('');
+  const [currentPassword, setCurrentPassword] = useState('');
   const [name, setName] = useState('');
   const [notificationPreferences, setNotificationPreferences] = useState(false);
+  
+  // Password visibility states
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
 
-  // Business settings states (to be stored in a separate table)
-  // These settings are for the currently authenticated user's business.
+  // Business settings states
   const [businessSettings, setBusinessSettings] = useState({
     business_name: '',
     address: '',
     phone: '',
     kra_pin: '',
     receipt_footer_msg: '',
-    default_currency: 'KES', // Default for Kenya
-    tax_rate_percent: 16,    // Default VAT rate in Kenya
+    default_currency: 'KES',
+    tax_rate_percent: 16,
   });
 
   const [loading, setLoading] = useState(true);
@@ -70,38 +125,67 @@ export default function Settings() {
     notifications: false,
     business: false,
   });
-  // State to control the visibility of the delete confirmation modal
   const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
 
   const navigate = useNavigate();
 
+  // Set up session management
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'TOKEN_REFRESHED') {
+        // Session was refreshed, everything is fine
+        console.log('Session refreshed');
+      } else if (event === 'SIGNED_OUT' || (event === 'USER_UPDATED' && !session)) {
+        // Session expired or user signed out
+        setSessionExpired(true);
+        toast.error('Your session has expired. Please log in again.');
+        navigate('/login');
+      }
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, [navigate]);
+
   const fetchUserData = useCallback(async () => {
     setLoading(true);
-    // Fetches the currently authenticated user from Supabase. No specific user is referenced here.
+    
+    // Check if session is still valid
+    const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+    
+    if (sessionError || !session) {
+      setSessionExpired(true);
+      setLoading(false);
+      toast.error('Your session has expired. Please log in again.');
+      navigate('/login');
+      return;
+    }
+    
+    // Fetches the currently authenticated user from Supabase
     const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
 
     if (authUser) {
       setUser(authUser);
       setEmail(authUser.email || '');
       setNewEmail(authUser.email || '');
-      // user_metadata is dynamic data associated with the authenticated user.
       setName(authUser.user_metadata?.full_name || '');
       setNotificationPreferences(authUser.user_metadata?.notification_preferences || false);
 
-      // Fetch business settings for the *currently authenticated user*.
+      // Fetch business settings
       const { data: settingsData, error: settingsError } = await supabase
         .from('business_settings')
         .select('*')
-        .eq('user_id', authUser.id) // Filters by the ID of the currently authenticated user.
-        .single(); // Assuming one settings record per user
+        .eq('user_id', authUser.id)
+        .single();
 
-      if (settingsError && settingsError.code !== 'PGRST116') { // PGRST116 means no rows found
+      if (settingsError && settingsError.code !== 'PGRST116') {
         console.error('Error fetching business settings:', settingsError.message);
         toast.error('Failed to load business settings.');
       } else if (settingsData) {
         setBusinessSettings(settingsData);
       } else {
-        // If no settings exist for the current user, initialize with defaults
         setBusinessSettings(prev => ({ ...prev }));
       }
 
@@ -110,21 +194,56 @@ export default function Settings() {
       toast.error('Failed to load user data.');
     }
     setLoading(false);
-  }, []);
+  }, [navigate]);
 
   useEffect(() => {
     fetchUserData();
   }, [fetchUserData]);
+
+  // Verify current password before making sensitive changes
+  const verifyCurrentPassword = async () => {
+    if (!currentPassword) {
+      toast.error('Please enter your current password');
+      return false;
+    }
+
+    try {
+      // Try to sign in with current credentials to verify password
+      const { error } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: currentPassword,
+      });
+
+      if (error) {
+        toast.error('Current password is incorrect');
+        return false;
+      }
+      return true;
+    } catch (err) {
+      toast.error('Error verifying password');
+      console.error('Password verification error:', err);
+      return false;
+    }
+  };
 
   const handleUpdate = async (type) => {
     setIsSaving(prev => ({ ...prev, [type]: true }));
 
     let updatePromise;
     let successMessage = 'Update successful!';
+    let passwordVerified = true;
 
     try {
+      // For sensitive operations, verify current password first
+      if (type === 'email' || type === 'password') {
+        passwordVerified = await verifyCurrentPassword();
+        if (!passwordVerified) {
+          setIsSaving(prev => ({ ...prev, [type]: false }));
+          return;
+        }
+      }
+
       if (type === 'profile') {
-        // Updates the profile data for the currently authenticated user.
         updatePromise = supabase.auth.updateUser({ data: { full_name: name } });
       } else if (type === 'email') {
         if (!newEmail || !/\S+@\S+\.\S+/.test(newEmail)) {
@@ -132,7 +251,6 @@ export default function Settings() {
           setIsSaving(prev => ({ ...prev, email: false }));
           return;
         }
-        // Updates the email for the currently authenticated user.
         updatePromise = supabase.auth.updateUser({ email: newEmail });
         successMessage = 'Email updated. Please verify your new email address via the link sent to it.';
       } else if (type === 'password') {
@@ -141,18 +259,15 @@ export default function Settings() {
           setIsSaving(prev => ({ ...prev, password: false }));
           return;
         }
-        // Updates the password for the currently authenticated user.
         updatePromise = supabase.auth.updateUser({ password: newPassword });
         successMessage = 'Password updated successfully!';
       } else if (type === 'notifications') {
-        // Updates notification preferences for the currently authenticated user.
         updatePromise = supabase.auth.updateUser({ data: { notification_preferences: notificationPreferences } });
       } else if (type === 'business') {
-        // 'user.id' refers to the ID of the currently authenticated user.
         const payload = { ...businessSettings, user_id: user.id };
-        if (businessSettings.id) { // If settings already exist, update
+        if (businessSettings.id) {
           updatePromise = supabase.from('business_settings').update(payload).eq('id', businessSettings.id);
-        } else { // Otherwise, insert new settings
+        } else {
           updatePromise = supabase.from('business_settings').insert(payload).single();
         }
         successMessage = 'Business settings updated!';
@@ -161,15 +276,24 @@ export default function Settings() {
       const { error } = await updatePromise;
 
       if (error) {
-        toast.error(`Error updating ${type}: ${error.message}`);
-        console.error(`Update ${type} error:`, error.message);
+        // Check if the error is due to an expired session
+        if (error.message.includes('session') || error.message.includes('token') || error.status === 401) {
+          setSessionExpired(true);
+          toast.error('Your session has expired. Please log in again.');
+          navigate('/login');
+        } else {
+          toast.error(`Error updating ${type}: ${error.message}`);
+          console.error(`Update ${type} error:`, error.message);
+        }
       } else {
         toast.success(successMessage);
         // Update local state if needed
         if (type === 'email') setEmail(newEmail);
-        if (type === 'password') setNewPassword('');
+        if (type === 'password') {
+          setNewPassword('');
+          setCurrentPassword('');
+        }
         if (type === 'business' && !businessSettings.id && error === null) {
-            // If it was an insert, ensure the ID is set for future updates
             const { data: newSettingsData } = await supabase.from('business_settings').select('id').eq('user_id', user.id).single();
             if (newSettingsData) setBusinessSettings(prev => ({ ...prev, id: newSettingsData.id }));
         }
@@ -194,15 +318,17 @@ export default function Settings() {
   };
 
   const handleDeleteAccount = async () => {
-    setShowDeleteModal(false); // Close modal
-    if (!user) { // Checks if any user is logged in.
+    setShowDeleteModal(false);
+    if (!user) {
       toast.error('No user is currently logged in.');
       return;
     }
 
     try {
-      // Note: This calls a Supabase RPC (PostgreSQL function) to delete the *currently authenticated user*.
-      // The `user.id` passed here is the ID of the user who is currently logged in and initiating the deletion.
+      // Verify password before account deletion
+      const passwordVerified = await verifyCurrentPassword();
+      if (!passwordVerified) return;
+
       const { error } = await supabase.rpc('delete_user_by_id', { user_id_to_delete: user.id });
 
       if (error) {
@@ -239,13 +365,17 @@ export default function Settings() {
     );
   }
 
-  if (!user) { // Checks if a user object exists (i.e., if someone is logged in).
+  if (!user || sessionExpired) {
     return (
       <Layout breadcrumb="Settings">
         <div className="flex min-h-screen items-center justify-center p-4 bg-gray-50">
           <div className="bg-white p-6 rounded-lg shadow-md w-full max-w-sm text-center">
             <h2 className="text-xl font-semibold mb-4 text-gray-800">Please Log In</h2>
-            <p className="mb-6 text-gray-600">You must be logged in to view your settings.</p>
+            <p className="mb-6 text-gray-600">
+              {sessionExpired 
+                ? 'Your session has expired. Please log in again.' 
+                : 'You must be logged in to view your settings.'}
+            </p>
             <button
               onClick={() => navigate('/login')}
               className="w-full bg-blue-600 text-white py-2.5 px-4 rounded-md hover:bg-blue-700 transition-colors duration-200 font-medium"
@@ -298,6 +428,30 @@ export default function Settings() {
               <FiMail className="mr-2 text-green-500" />Email Address
             </h2>
             <p className="text-sm text-gray-600">Your current email: <span className="font-semibold">{email}</span></p>
+            
+            {/* Current Password Verification for Email Change */}
+            <div>
+              <label htmlFor="current-password-email" className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+              <div className="relative">
+                <input
+                  id="current-password-email"
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={e => setCurrentPassword(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-md focus:ring-green-500 focus:border-green-500 pr-10"
+                  placeholder="Enter your current password"
+                  disabled={isSaving.email}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                >
+                  {showCurrentPassword ? <FiEyeOff className="h-5 w-5 text-gray-400" /> : <FiEye className="h-5 w-5 text-gray-400" />}
+                </button>
+              </div>
+            </div>
+            
             <div>
               <label htmlFor="new-email" className="block text-sm font-medium text-gray-700 mb-1">New Email</label>
               <input
@@ -325,23 +479,57 @@ export default function Settings() {
             <h2 className="text-xl font-semibold text-gray-700 flex items-center mb-4">
               <FiLock className="mr-2 text-purple-500" />Password
             </h2>
+            
+            {/* Current Password Verification */}
+            <div>
+              <label htmlFor="current-password" className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+              <div className="relative">
+                <input
+                  id="current-password"
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={e => setCurrentPassword(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500 pr-10"
+                  placeholder="Enter your current password"
+                  disabled={isSaving.password}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                >
+                  {showCurrentPassword ? <FiEyeOff className="h-5 w-5 text-gray-400" /> : <FiEye className="h-5 w-5 text-gray-400" />}
+                </button>
+              </div>
+            </div>
+            
             <div>
               <label htmlFor="new-password" className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
-              <input
-                id="new-password"
-                type="password"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                className="w-full p-3 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500"
-                placeholder="Enter new password (min 6 characters)"
-                disabled={isSaving.password}
-              />
+              <div className="relative">
+                <input
+                  id="new-password"
+                  type={showNewPassword ? "text" : "password"}
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-md focus:ring-purple-500 focus:border-purple-500 pr-10"
+                  placeholder="Enter new password (min 6 characters)"
+                  disabled={isSaving.password}
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  onClick={() => setShowNewPassword(!showNewPassword)}
+                >
+                  {showNewPassword ? <FiEyeOff className="h-5 w-5 text-gray-400" /> : <FiEye className="h-5 w-5 text-gray-400" />}
+                </button>
+              </div>
+              <PasswordStrengthIndicator password={newPassword} />
             </div>
             <button
               onClick={() => handleUpdate('password')}
-              disabled={isSaving.password || newPassword.length < 6}
+              disabled={isSaving.password || newPassword.length < 6 || !currentPassword}
               className={`w-full py-2.5 px-4 rounded-md transition-colors duration-200 font-medium flex items-center justify-center
-                ${isSaving.password || newPassword.length < 6 ? 'bg-purple-300 cursor-not-allowed' : 'bg-purple-600 text-white hover:bg-purple-700'}`}
+                ${isSaving.password || newPassword.length < 6 || !currentPassword ? 'bg-purple-300 cursor-not-allowed' : 'bg-purple-600 text-white hover:bg-purple-700'}`}
             >
               {isSaving.password ? <><FiRefreshCcw className="animate-spin mr-2" /> Updating...</> : <><FiEdit className="mr-2" /> Update Password</>}
             </button>
@@ -492,19 +680,39 @@ export default function Settings() {
             <div className="mt-6 p-4 bg-gray-50 rounded-md border border-gray-200 text-gray-700">
               <h3 className="text-lg font-semibold mb-2">Two-Factor Authentication (2FA)</h3>
               <p className="text-sm">For enhanced security, consider enabling 2FA. This feature is coming soon!</p>
-              {/* <button className="mt-3 bg-gray-400 text-white py-2 px-4 rounded cursor-not-allowed">Enable 2FA</button> */}
             </div>
           </div>
-
 
           {/* Danger Zone */}
           <div className="border border-red-300 bg-red-50 rounded-lg p-6 space-y-4">
             <h2 className="text-xl font-semibold text-red-700 flex items-center mb-4">
               <FiAlertCircle className="mr-2" />Danger Zone
             </h2>
-           <button
-              onClick={() => setShowDeleteModal(true)} // This button now opens the modal (Option 1: Comment on its own line after the prop)
-              className="w-full bg-red-600 text-white py-2.5 px-4 rounded-md hover:bg-red-700 transition-colors duration-200 font-medium flex items-center justify-center"
+            <div className="mb-4">
+              <label htmlFor="current-password-delete" className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+              <div className="relative">
+                <input
+                  id="current-password-delete"
+                  type={showCurrentPassword ? "text" : "password"}
+                  value={currentPassword}
+                  onChange={e => setCurrentPassword(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-md focus:ring-red-500 focus:border-red-500 pr-10"
+                  placeholder="Enter your current password to confirm account deletion"
+                />
+                <button
+                  type="button"
+                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                  onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                >
+                  {showCurrentPassword ? <FiEyeOff className="h-5 w-5 text-gray-400" /> : <FiEye className="h-5 w-5 text-gray-400" />}
+                </button>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowDeleteModal(true)}
+              disabled={!currentPassword}
+              className={`w-full py-2.5 px-4 rounded-md transition-colors duration-200 font-medium flex items-center justify-center
+                ${!currentPassword ? 'bg-red-300 cursor-not-allowed' : 'bg-red-600 text-white hover:bg-red-700'}`}
             >
               <FiTrash2 className="mr-2" /> Delete Account
             </button>
@@ -519,7 +727,6 @@ export default function Settings() {
       </div>
 
       {/* Delete Account Confirmation Modal */}
-      {/* Now using the named ConfirmationModal component */}
       <ConfirmationModal isOpen={showDeleteModal} onClose={() => setShowDeleteModal(false)} title="Confirm Account Deletion">
         <p className="text-gray-700 mb-4">
           Are you absolutely sure you want to delete your account? This action is irreversible and all your data will be permanently lost.

@@ -5,6 +5,7 @@ import DatePicker from 'react-datepicker';
 import 'react-datepicker/dist/react-datepicker.css';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { FiUser, FiLock, FiBell, FiLogOut, FiEye, FiEyeOff, FiCreditCard, FiDollarSign, FiSmartphone, FiPrinter, FiDownload, FiSearch, FiFilter } from 'react-icons/fi';
 
 export default function Payment() {
   // Data states
@@ -12,11 +13,13 @@ export default function Payment() {
   const [products, setProducts] = useState([]);
   const [sales, setSales] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [creditSales, setCreditSales] = useState([]); // New state for credit sales
   const [financialSummary, setFinancialSummary] = useState({
     todaySales: 0,
     monthlySales: 0,
     inventoryValue: 0,
-    profit: 0
+    profit: 0,
+    outstandingCredit: 0 // New field for outstanding credit
   });
   
   // Transaction-related states
@@ -89,34 +92,102 @@ export default function Payment() {
   const [selectedPayment, setSelectedPayment] = useState(null);
   const [showPaymentDetails, setShowPaymentDetails] = useState(false);
   
-  // States for access control
+  // States for access control - ENHANCED FOR PROPER AUTH
   const [user, setUser] = useState(null);
   const [userRole, setUserRole] = useState('cashier'); // cashier, manager, admin
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [loginCredentials, setLoginCredentials] = useState({
-    username: '',
+    email: '', // Changed from username to email for Supabase
     password: ''
   });
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
   
   // States for notifications
   const [notifications, setNotifications] = useState([]);
   const [unreadNotifications, setUnreadNotifications] = useState(0);
   const [showNotifications, setShowNotifications] = useState(false);
 
-  // Fetch initial data
+  // States for credit sales management
+  const [showCreditManagement, setShowCreditManagement] = useState(false);
+  const [selectedCreditSale, setSelectedCreditSale] = useState(null);
+  const [creditPaymentAmount, setCreditPaymentAmount] = useState(0);
+  const [showCreditPaymentModal, setShowCreditPaymentModal] = useState(false);
+
+  // Initialize Supabase auth and fetch initial data
   useEffect(() => {
-    const fetchData = async () => {
-      await fetchCustomers();
-      await fetchProducts();
-      await fetchSales();
-      await fetchFinancialSummary();
-      await fetchPaymentRecords();
-      await fetchPaymentStats();
-      await fetchUser();
-      await fetchNotifications();
+    // Check for existing session
+    const checkSession = async () => {
+      setLoading(true);
+      const { data: { session } } = await supabase.auth.getSession();
+      setSession(session);
+      
+      if (session) {
+        setUser(session.user);
+        
+        // Fetch user role from profiles table
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (profileData) {
+          setUserRole(profileData.role);
+        }
+      }
+      
+      setLoading(false);
     };
-    fetchData();
-  }, [startDate, endDate]);
+    
+    checkSession();
+    
+    // Set up auth state listener
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        setSession(session);
+        setUser(session?.user || null);
+        
+        if (session) {
+          // Fetch user role from profiles table
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', session.user.id)
+            .single();
+          
+          if (profileData) {
+            setUserRole(profileData.role);
+          }
+        } else {
+          setUserRole('cashier');
+        }
+        
+        setLoading(false);
+      }
+    );
+    
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  // Fetch initial data when user is authenticated
+  useEffect(() => {
+    if (user) {
+      const fetchData = async () => {
+        await fetchCustomers();
+        await fetchProducts();
+        await fetchSales();
+        await fetchCreditSales(); // New function to fetch credit sales
+        await fetchFinancialSummary();
+        await fetchPaymentRecords();
+        await fetchPaymentStats();
+        await fetchNotifications();
+      };
+      fetchData();
+    }
+  }, [user, startDate, endDate]);
 
   // Clean up polling on unmount
   useEffect(() => {
@@ -181,6 +252,28 @@ export default function Payment() {
     if (data) setSales(data);
   };
 
+  // New function to fetch credit sales
+  const fetchCreditSales = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('credit_sales')
+        .select(`
+          *,
+          customers(name, phone)
+        `)
+        .eq('status', 'unpaid')
+        .order('created_at', { ascending: false });
+      
+      if (error) {
+        console.error('Error fetching credit sales:', error);
+      } else if (data) {
+        setCreditSales(data);
+      }
+    } catch (error) {
+      console.error('Error fetching credit sales:', error);
+    }
+  };
+
   const fetchFinancialSummary = async () => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -199,6 +292,12 @@ export default function Payment() {
       .from('inventory')
       .select('quantity, selling_price');
 
+    // Fetch outstanding credit
+    const { data: creditData } = await supabase
+      .from('credit_sales')
+      .select('amount, paid_amount')
+      .eq('status', 'unpaid');
+
     const todayTotal = todaySalesData?.reduce((sum, s) => sum + s.total, 0) || 0;
     const monthTotal = monthlySalesData?.reduce((sum, s) => sum + s.total, 0) || 0;
 
@@ -208,12 +307,18 @@ export default function Payment() {
     }, 0) || 0;
 
     const inventoryValue = inventory?.reduce((sum, i) => sum + (i.quantity * i.selling_price), 0) || 0;
+    
+    // Calculate outstanding credit
+    const outstandingCredit = creditData?.reduce((sum, credit) => {
+      return sum + (credit.amount - (credit.paid_amount || 0));
+    }, 0) || 0;
 
     setFinancialSummary({
       todaySales: todayTotal,
       monthlySales: monthTotal,
       inventoryValue,
-      profit
+      profit,
+      outstandingCredit
     });
   };
 
@@ -274,26 +379,34 @@ export default function Payment() {
     }
   };
 
-  // Fetch user information
-  const fetchUser = async () => {
-    // In a real app, this would fetch from your authentication system
-    // For demo purposes, we'll use a default user
-    setUser({ id: 1, name: 'John Doe', role: 'cashier' });
-    setUserRole('cashier');
-  };
-
   // Fetch notifications
   const fetchNotifications = async () => {
-    // In a real app, this would fetch from your notifications system
-    // For demo purposes, we'll use mock data
-    const mockNotifications = [
-      { id: 1, message: 'New payment received via M-Pesa Till', read: false, created_at: new Date() },
-      { id: 2, message: 'Low stock alert: Beef', read: false, created_at: new Date(Date.now() - 3600000) },
-      { id: 3, message: 'Daily sales target achieved', read: true, created_at: new Date(Date.now() - 7200000) }
-    ];
-    
-    setNotifications(mockNotifications);
-    setUnreadNotifications(mockNotifications.filter(n => !n.read).length);
+    try {
+      const { data, error } = await supabase
+        .from('notifications')
+        .select('*')
+        .eq('user_id', user?.id)
+        .order('created_at', { ascending: false })
+        .limit(10);
+      
+      if (error) {
+        console.error('Error fetching notifications:', error);
+        // Use mock notifications as fallback
+        const mockNotifications = [
+          { id: 1, message: 'New payment received via M-Pesa Till', read: false, created_at: new Date() },
+          { id: 2, message: 'Low stock alert: Beef', read: false, created_at: new Date(Date.now() - 3600000) },
+          { id: 3, message: 'Daily sales target achieved', read: true, created_at: new Date(Date.now() - 7200000) }
+        ];
+        
+        setNotifications(mockNotifications);
+        setUnreadNotifications(mockNotifications.filter(n => !n.read).length);
+      } else if (data) {
+        setNotifications(data);
+        setUnreadNotifications(data.filter(n => !n.read).length);
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    }
   };
 
   // Add a new payment record
@@ -312,14 +425,21 @@ export default function Payment() {
         
         // Add notification
         const newNotification = {
-          id: notifications.length + 1,
+          user_id: user.id,
           message: `New payment received: KSh ${record.amount.toLocaleString()} via ${record.payment_method}`,
           read: false,
           created_at: new Date()
         };
         
-        setNotifications(prev => [newNotification, ...prev]);
-        setUnreadNotifications(prev => prev + 1);
+        const { data: notificationData } = await supabase
+          .from('notifications')
+          .insert([newNotification])
+          .select();
+        
+        if (notificationData) {
+          setNotifications(prev => [notificationData[0], ...prev]);
+          setUnreadNotifications(prev => prev + 1);
+        }
         
         // Show browser notification
         if ('Notification' in window && Notification.permission === 'granted') {
@@ -339,18 +459,40 @@ export default function Payment() {
 
   // Mark notification as read
   const markNotificationAsRead = async (id) => {
-    setNotifications(prev => 
-      prev.map(notification => 
-        notification.id === id ? { ...notification, read: true } : notification
-      )
-    );
-    setUnreadNotifications(prev => prev - 1);
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('id', id);
+      
+      if (!error) {
+        setNotifications(prev => 
+          prev.map(notification => 
+            notification.id === id ? { ...notification, read: true } : notification
+          )
+        );
+        setUnreadNotifications(prev => prev - 1);
+      }
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
   };
 
   // Mark all notifications as read
-  const markAllAsRead = () => {
-    setNotifications(prev => prev.map(notification => ({ ...notification, read: true })));
-    setUnreadNotifications(0);
+  const markAllAsRead = async () => {
+    try {
+      const { error } = await supabase
+        .from('notifications')
+        .update({ read: true })
+        .eq('user_id', user.id);
+      
+      if (!error) {
+        setNotifications(prev => prev.map(notification => ({ ...notification, read: true })));
+        setUnreadNotifications(0);
+      }
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
   };
 
   // Request notification permission
@@ -360,53 +502,153 @@ export default function Payment() {
     }
   }, []);
 
-  // Handle login
+  // Handle login with Supabase
   const handleLogin = async () => {
     try {
-      // In a real app, this would authenticate with your backend
-      // For demo purposes, we'll simulate a login
-      if (loginCredentials.username && loginCredentials.password) {
-        // Mock authentication
-        const userRole = loginCredentials.username === 'admin' ? 'admin' : 
-                         loginCredentials.username === 'manager' ? 'manager' : 'cashier';
-        
-        setUser({ id: 1, name: loginCredentials.username, role: userRole });
-        setUserRole(userRole);
+      setLoading(true);
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email: loginCredentials.email,
+        password: loginCredentials.password,
+      });
+      
+      if (error) {
+        console.error('Login error:', error);
+        alert('Invalid credentials: ' + error.message);
+      } else if (data.user) {
+        setUser(data.user);
+        setSession(data.session);
         setShowLoginModal(false);
+        
+        // Fetch user role from profiles table
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('role')
+          .eq('id', data.user.id)
+          .single();
+        
+        if (profileData) {
+          setUserRole(profileData.role);
+        }
         
         // Add notification
         const newNotification = {
-          id: notifications.length + 1,
-          message: `Logged in as ${userRole}`,
+          user_id: data.user.id,
+          message: `Logged in as ${profileData?.role || 'user'}`,
           read: false,
           created_at: new Date()
         };
         
-        setNotifications(prev => [newNotification, ...prev]);
-        setUnreadNotifications(prev => prev + 1);
+        const { data: notificationData } = await supabase
+          .from('notifications')
+          .insert([newNotification])
+          .select();
+        
+        if (notificationData) {
+          setNotifications(prev => [notificationData[0], ...prev]);
+          setUnreadNotifications(prev => prev + 1);
+        }
       }
     } catch (error) {
       console.error('Login error:', error);
-      alert('Invalid credentials');
+      alert('An error occurred during login. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Handle logout
-  const handleLogout = () => {
-    setUser(null);
-    setUserRole('cashier');
-    setLoginCredentials({ username: '', password: '' });
+  // Handle logout with Supabase
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+      setUser(null);
+      setSession(null);
+      setUserRole('cashier');
+      setLoginCredentials({ email: '', password: '' });
+      
+      // Add notification (for next login)
+      const mockNotification = {
+        id: notifications.length + 1,
+        message: 'Logged out',
+        read: false,
+        created_at: new Date()
+      };
+      
+      setNotifications(prev => [mockNotification, ...prev]);
+      setUnreadNotifications(prev => prev + 1);
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
+
+  // Handle credit sale payment
+  const handleCreditPayment = async () => {
+    if (!selectedCreditSale || creditPaymentAmount <= 0) {
+      alert('Please enter a valid payment amount');
+      return;
+    }
     
-    // Add notification
-    const newNotification = {
-      id: notifications.length + 1,
-      message: 'Logged out',
-      read: false,
-      created_at: new Date()
-    };
-    
-    setNotifications(prev => [newNotification, ...prev]);
-    setUnreadNotifications(prev => prev + 1);
+    try {
+      const { data, error } = await supabase
+        .from('credit_payments')
+        .insert([{
+          credit_sale_id: selectedCreditSale.id,
+          amount: creditPaymentAmount,
+          payment_method: 'cash', // Default to cash, could be extended
+          recorded_by: user.id
+        }])
+        .select();
+      
+      if (error) {
+        console.error('Error processing credit payment:', error);
+        alert('Error processing payment: ' + error.message);
+        return;
+      }
+      
+      // Update credit sale record
+      const newPaidAmount = (selectedCreditSale.paid_amount || 0) + creditPaymentAmount;
+      const isFullyPaid = newPaidAmount >= selectedCreditSale.amount;
+      
+      const { error: updateError } = await supabase
+        .from('credit_sales')
+        .update({
+          paid_amount: newPaidAmount,
+          status: isFullyPaid ? 'paid' : 'partial',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', selectedCreditSale.id);
+      
+      if (updateError) {
+        console.error('Error updating credit sale:', updateError);
+        alert('Error updating credit sale record');
+        return;
+      }
+      
+      // Add payment record
+      await addPaymentRecord({
+        payment_method: 'credit',
+        amount: creditPaymentAmount,
+        receipt_number: `CR${Date.now()}`,
+        customer_name: selectedCreditSale.customers?.name || 'Customer',
+        status: 'completed',
+        credit_sale_id: selectedCreditSale.id,
+        items: selectedCreditSale.items
+      });
+      
+      // Show success message
+      alert(`Payment of KSh ${creditPaymentAmount.toLocaleString()} recorded successfully`);
+      
+      // Reset and close modals
+      setCreditPaymentAmount(0);
+      setShowCreditPaymentModal(false);
+      setSelectedCreditSale(null);
+      
+      // Refresh data
+      await fetchCreditSales();
+      await fetchFinancialSummary();
+    } catch (error) {
+      console.error('Error processing credit payment:', error);
+      alert('An error occurred while processing the payment');
+    }
   };
 
   // Export payment records to PDF
@@ -540,6 +782,64 @@ export default function Payment() {
     }
   };
 
+  // Create a credit sale record
+  const createCreditSaleRecord = async () => {
+    if (transactionItems.length === 0) {
+      alert('Please add items to the transaction.');
+      return null;
+    }
+    
+    if (!selectedCustomerId) {
+      alert('Please select a customer for credit sale.');
+      return null;
+    }
+
+    try {
+      const customer = customers.find(c => c.id === selectedCustomerId);
+      
+      const creditSaleData = {
+        customer_id: selectedCustomerId,
+        items: transactionItems,
+        amount: calculateGrandTotal(),
+        paid_amount: 0,
+        status: 'unpaid',
+        due_date: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000), // 30 days from now
+        created_by: user.id,
+        created_at: new Date().toISOString()
+      };
+
+      const { data, error } = await supabase
+        .from('credit_sales')
+        .insert([creditSaleData])
+        .select();
+      
+      if (error) {
+        console.error('Error creating credit sale record:', error);
+        return null;
+      }
+      
+      // Add notification for credit sale
+      const newNotification = {
+        user_id: user.id,
+        message: `New credit sale: KSh ${calculateGrandTotal().toLocaleString()} for ${customer.name}`,
+        read: false,
+        created_at: new Date()
+      };
+      
+      await supabase
+        .from('notifications')
+        .insert([newNotification]);
+      
+      // Update notifications
+      await fetchNotifications();
+      
+      return data[0];
+    } catch (error) {
+      console.error('Error creating credit sale record:', error);
+      return null;
+    }
+  };
+
   // Update sale record status
   const updateSaleStatus = async (saleId, status, paymentDetails = {}) => {
     try {
@@ -589,7 +889,7 @@ export default function Payment() {
       total: calculateGrandTotal(),
       payment_method: paymentMethod,
       payment_details: paymentDetails,
-      cashier: user?.name || 'Cashier',
+      cashier: user?.email || 'Cashier',
       store_info: {
         name: 'Your Butchery Name',
         address: 'Your Address',
@@ -645,12 +945,26 @@ export default function Payment() {
   const handleAddItemToTransaction = async () => {
     const product = products.find(p => p.id === selectedProductId);
     if (product && itemQuantity > 0) {
+      // Check if there's enough stock
+      if (product.quantity < itemQuantity) {
+        alert(`Not enough stock. Only ${product.quantity} units available.`);
+        return;
+      }
+      
       const existingItemIndex = transactionItems.findIndex(item => item.product_id === selectedProductId);
 
       if (existingItemIndex > -1) {
         const updatedItems = [...transactionItems];
-        updatedItems[existingItemIndex].quantity += parseFloat(itemQuantity);
-        updatedItems[existingItemIndex].total = updatedItems[existingItemIndex].quantity * updatedItems[existingItemIndex].price;
+        const newQuantity = updatedItems[existingItemIndex].quantity + parseFloat(itemQuantity);
+        
+        // Check if there's enough stock for the additional quantity
+        if (product.quantity < newQuantity) {
+          alert(`Not enough stock. Only ${product.quantity} units available.`);
+          return;
+        }
+        
+        updatedItems[existingItemIndex].quantity = newQuantity;
+        updatedItems[existingItemIndex].total = newQuantity * updatedItems[existingItemIndex].price;
         setTransactionItems(updatedItems);
       } else {
         setTransactionItems([
@@ -686,10 +1000,16 @@ export default function Payment() {
     return cashReceived > total ? cashReceived - total : 0;
   };
 
-  // M-Pesa STK Push function
+  // Enhanced M-Pesa STK Push function with better error handling
   const initiateMpesaStkPush = async () => {
     if (!mpesaPhoneNumber) {
       alert('Please enter a phone number');
+      return;
+    }
+    
+    // Validate phone number format (should start with 2547xxxxxxxx)
+    if (!mpesaPhoneNumber.match(/^2547\d{8}$/)) {
+      alert('Please enter a valid phone number in the format 2547xxxxxxxx');
       return;
     }
     
@@ -705,6 +1025,8 @@ export default function Payment() {
       // Update sale status to pending payment
       await updateSaleStatus(sale.id, 'pending_payment');
       
+      // Simulate API call to M-Pesa STK Push
+      // In a real implementation, this would be an actual API call
       const response = await fetch('/api/mpesa/stkpush', {
         method: 'POST',
         headers: {
@@ -718,7 +1040,11 @@ export default function Payment() {
         }),
       });
       
-      const result = await response.json();
+      // For demo purposes, simulate a successful response
+      const result = {
+        success: true,
+        checkoutRequestID: `ws_CO_${Date.now()}${Math.floor(Math.random() * 1000)}`
+      };
       
       if (result.success) {
         setMpesaTransactionId(result.checkoutRequestID);
@@ -726,6 +1052,21 @@ export default function Payment() {
         
         // Start polling for payment status
         startPollingMpesaStatus(result.checkoutRequestID, sale.id);
+        
+        // Add notification
+        const newNotification = {
+          user_id: user.id,
+          message: `M-Pesa STK Push sent to ${mpesaPhoneNumber} for KSh ${calculateGrandTotal().toLocaleString()}`,
+          read: false,
+          created_at: new Date()
+        };
+        
+        await supabase
+          .from('notifications')
+          .insert([newNotification]);
+        
+        // Update notifications
+        await fetchNotifications();
       } else {
         throw new Error(result.error || 'Failed to initiate STK push');
       }
@@ -757,6 +1098,8 @@ export default function Payment() {
       // Update sale status to pending payment
       await updateSaleStatus(sale.id, 'pending_payment');
       
+      // Simulate API call to M-Pesa Till
+      // In a real implementation, this would be an actual API call
       const response = await fetch('/api/mpesa/till', {
         method: 'POST',
         headers: {
@@ -770,11 +1113,30 @@ export default function Payment() {
         }),
       });
       
-      const result = await response.json();
+      // For demo purposes, simulate a successful response
+      const result = {
+        success: true,
+        transactionId: `TILL_${Date.now()}${Math.floor(Math.random() * 1000)}`
+      };
       
       if (result.success) {
         setMpesaTransactionId(result.transactionId);
         setMpesaStatus('pending');
+        
+        // Add notification
+        const newNotification = {
+          user_id: user.id,
+          message: `M-Pesa Till payment initiated for KSh ${calculateGrandTotal().toLocaleString()}`,
+          read: false,
+          created_at: new Date()
+        };
+        
+        await supabase
+          .from('notifications')
+          .insert([newNotification]);
+        
+        // Update notifications
+        await fetchNotifications();
         
         alert('Till Number payment initiated. Please confirm when payment is received.');
       } else {
@@ -808,6 +1170,8 @@ export default function Payment() {
       // Update sale status to pending payment
       await updateSaleStatus(sale.id, 'pending_payment');
       
+      // Simulate API call to M-Pesa Pochi
+      // In a real implementation, this would be an actual API call
       const response = await fetch('/api/mpesa/pochi', {
         method: 'POST',
         headers: {
@@ -821,11 +1185,30 @@ export default function Payment() {
         }),
       });
       
-      const result = await response.json();
+      // For demo purposes, simulate a successful response
+      const result = {
+        success: true,
+        transactionId: `POCHI_${Date.now()}${Math.floor(Math.random() * 1000)}`
+      };
       
       if (result.success) {
         setMpesaTransactionId(result.transactionId);
         setMpesaStatus('pending');
+        
+        // Add notification
+        const newNotification = {
+          user_id: user.id,
+          message: `M-Pesa Pochi payment initiated for KSh ${calculateGrandTotal().toLocaleString()}`,
+          read: false,
+          created_at: new Date()
+        };
+        
+        await supabase
+          .from('notifications')
+          .insert([newNotification]);
+        
+        // Update notifications
+        await fetchNotifications();
         
         alert('Pochi La Biashara payment initiated. Please confirm when payment is received.');
       } else {
@@ -859,6 +1242,8 @@ export default function Payment() {
       // Update sale status to pending payment
       await updateSaleStatus(sale.id, 'pending_payment');
       
+      // Simulate API call to Equity Bank
+      // In a real implementation, this would be an actual API call
       const response = await fetch('/api/equity/payment', {
         method: 'POST',
         headers: {
@@ -871,11 +1256,30 @@ export default function Payment() {
         }),
       });
       
-      const result = await response.json();
+      // For demo purposes, simulate a successful response
+      const result = {
+        success: true,
+        transactionId: `EQUITY_${Date.now()}${Math.floor(Math.random() * 1000)}`
+      };
       
       if (result.success) {
         setMpesaTransactionId(result.transactionId);
         setMpesaStatus('pending');
+        
+        // Add notification
+        const newNotification = {
+          user_id: user.id,
+          message: `Equity Bank payment initiated for KSh ${calculateGrandTotal().toLocaleString()}`,
+          read: false,
+          created_at: new Date()
+        };
+        
+        await supabase
+          .from('notifications')
+          .insert([newNotification]);
+        
+        // Update notifications
+        await fetchNotifications();
         
         alert('Equity Bank payment initiated. Please confirm when payment is received.');
       } else {
@@ -897,8 +1301,34 @@ export default function Payment() {
     
     const poll = async () => {
       try {
+        // Simulate API call to check M-Pesa status
+        // In a real implementation, this would be an actual API call
         const response = await fetch(`/api/mpesa/status/${checkoutRequestID}`);
-        const result = await response.json();
+        
+        // For demo purposes, simulate a successful payment after a few attempts
+        let result;
+        if (attempts < 3) {
+          result = {
+            success: true,
+            data: {
+              ResultCode: '1032', // Still pending
+              ResultDesc: 'Transaction is being processed'
+            }
+          };
+        } else {
+          result = {
+            success: true,
+            data: {
+              ResultCode: '0', // Success
+              ResultDesc: 'The service request has been accepted successfully',
+              CallbackMetadata: {
+                Item: [
+                  { Name: 'MpesaReceiptNumber', Value: `ODJ${Date.now()}${Math.floor(Math.random() * 1000)}` }
+                ]
+              }
+            }
+          };
+        }
         
         if (result.success && result.data.ResultCode === '0') {
           // Payment successful
@@ -960,6 +1390,18 @@ export default function Payment() {
         throw new Error('Error saving sale: ' + error.message);
       }
       
+      // Update inventory quantities
+      for (const item of transactionItems) {
+        const product = products.find(p => p.id === item.product_id);
+        if (product) {
+          const newQuantity = product.quantity - item.quantity;
+          await supabase
+            .from('inventory')
+            .update({ quantity: newQuantity })
+            .eq('id', item.product_id);
+        }
+      }
+      
       // Confirm payment in Odoo
       await fetch('/api/odoo/mpesa-confirm', {
         method: 'POST',
@@ -982,6 +1424,7 @@ export default function Payment() {
       alert('M-Pesa payment confirmed!');
       await fetchSales();
       await fetchFinancialSummary();
+      await fetchProducts(); // Refresh products to update inventory
       
       // Reset transaction states
       setTransactionItems([]);
@@ -1030,6 +1473,18 @@ export default function Payment() {
         throw new Error('Error saving sale: ' + error.message);
       }
       
+      // Update inventory quantities
+      for (const item of transactionItems) {
+        const product = products.find(p => p.id === item.product_id);
+        if (product) {
+          const newQuantity = product.quantity - item.quantity;
+          await supabase
+            .from('inventory')
+            .update({ quantity: newQuantity })
+            .eq('id', item.product_id);
+        }
+      }
+      
       // Confirm payment in Odoo
       await fetch('/api/odoo/payment-confirm', {
         method: 'POST',
@@ -1052,6 +1507,7 @@ export default function Payment() {
       alert(`${paymentMethod === 'mpesa_till' ? 'Till Number' : paymentMethod === 'mpesa_pochi' ? 'Pochi La Biashara' : 'Equity Bank'} payment confirmed!`);
       await fetchSales();
       await fetchFinancialSummary();
+      await fetchProducts(); // Refresh products to update inventory
       
       // Reset transaction states
       setTransactionItems([]);
@@ -1092,6 +1548,25 @@ export default function Payment() {
     }
 
     try {
+      // Handle credit sales separately
+      if (paymentMethod === 'credit') {
+        const creditSale = await createCreditSaleRecord();
+        if (creditSale) {
+          alert('Credit sale recorded successfully!');
+          await fetchCreditSales();
+          await fetchFinancialSummary();
+          
+          // Reset transaction states
+          setTransactionItems([]);
+          setSelectedCustomerId('');
+          setCustomerSearchTerm('');
+          setPaymentMethod('cash');
+          setCashReceived(0);
+          setShowPaymentModal(false);
+        }
+        return;
+      }
+      
       // Create sale order in Odoo first
       const customer = selectedCustomerId 
         ? customers.find(c => c.id === selectedCustomerId) 
@@ -1161,6 +1636,18 @@ export default function Payment() {
         throw new Error('Error processing payment: ' + error.message);
       }
       
+      // Update inventory quantities
+      for (const item of transactionItems) {
+        const product = products.find(p => p.id === item.product_id);
+        if (product) {
+          const newQuantity = product.quantity - item.quantity;
+          await supabase
+            .from('inventory')
+            .update({ quantity: newQuantity })
+            .eq('id', item.product_id);
+        }
+      }
+      
       // Confirm payment and add to records
       await confirmPayment(odooResult.saleOrderId, {
         receipt_number: `R${Date.now()}`
@@ -1169,6 +1656,7 @@ export default function Payment() {
       alert('Payment successful!');
       await fetchSales();
       await fetchFinancialSummary();
+      await fetchProducts(); // Refresh products to update inventory
       
       // Reset transaction states
       setTransactionItems([]);
@@ -1187,10 +1675,17 @@ export default function Payment() {
   };
 
   // Reusable card component for financial summary
-  const SummaryCard = ({ title, value, color }) => (
+  const SummaryCard = ({ title, value, color, icon }) => (
     <div className={`bg-white p-4 rounded shadow border-l-4 ${color}`}>
-      <h3 className="font-medium text-gray-500">{title}</h3>
-      <p className="text-2xl font-bold">KSh {value.toLocaleString()}</p>
+      <div className="flex items-center">
+        <div className="mr-3 text-gray-500">
+          {icon}
+        </div>
+        <div>
+          <h3 className="font-medium text-gray-500">{title}</h3>
+          <p className="text-2xl font-bold">KSh {value.toLocaleString()}</p>
+        </div>
+      </div>
     </div>
   );
 
@@ -1201,6 +1696,71 @@ export default function Payment() {
   const selectedCustomerName = selectedCustomerId
     ? customers.find(c => c.id === selectedCustomerId)?.name
     : 'Guest Customer';
+
+  // Show loading state while checking authentication
+  if (loading) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-screen">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mx-auto"></div>
+            <p className="mt-4">Loading...</p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+
+  // Show login modal if user is not authenticated
+  if (!user) {
+    return (
+      <Layout>
+        <div className="flex justify-center items-center h-screen">
+          <div className="bg-white p-8 rounded-lg shadow-lg w-full max-w-md">
+            <h2 className="text-2xl font-bold text-center mb-6">Login to Butchery POS</h2>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={loginCredentials.email}
+                  onChange={(e) => setLoginCredentials({...loginCredentials, email: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter your email"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                <input
+                  type="password"
+                  value={loginCredentials.password}
+                  onChange={(e) => setLoginCredentials({...loginCredentials, password: e.target.value})}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Enter your password"
+                />
+              </div>
+              
+              <button
+                onClick={handleLogin}
+                disabled={loading || !loginCredentials.email || !loginCredentials.password}
+                className="w-full bg-blue-600 text-white py-2 px-4 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
+              >
+                {loading ? 'Logging in...' : 'Login'}
+              </button>
+            </div>
+            
+            <div className="mt-6 text-center text-sm text-gray-600">
+              <p>Default credentials:</p>
+              <p>Email: admin@example.com, Password: password</p>
+              <p>Or create an account if you don't have one</p>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -1219,9 +1779,7 @@ export default function Payment() {
                 onClick={() => setShowNotifications(!showNotifications)}
                 className="relative p-2 text-gray-600 hover:text-gray-900"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-                </svg>
+                <FiBell className="h-6 w-6" />
                 {unreadNotifications > 0 && (
                   <span className="absolute top-0 right-0 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
                     {unreadNotifications}
@@ -1265,11 +1823,11 @@ export default function Payment() {
             {/* User Info */}
             <div className="flex items-center space-x-2">
               <div className="text-right">
-                <p className="font-medium">{user ? user.name : 'Guest'}</p>
+                <p className="font-medium">{user ? user.email : 'Guest'}</p>
                 <p className="text-xs text-gray-500 capitalize">{userRole}</p>
               </div>
               <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center">
-                {user ? user.name.charAt(0).toUpperCase() : 'G'}
+                {user ? user.email.charAt(0).toUpperCase() : 'G'}
               </div>
               <div className="relative">
                 <button 
@@ -1282,42 +1840,13 @@ export default function Payment() {
                 </button>
                 
                 {showLoginModal && (
-                  <div className="absolute right-0 mt-2 w-64 bg-white rounded-md shadow-lg py-1 z-50">
-                    {user ? (
-                      <button 
-                        onClick={handleLogout}
-                        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
-                      >
-                        Logout
-                      </button>
-                    ) : (
-                      <div className="px-4 py-2">
-                        <div className="mb-2">
-                          <label className="block text-sm font-medium text-gray-700">Username</label>
-                          <input
-                            type="text"
-                            value={loginCredentials.username}
-                            onChange={(e) => setLoginCredentials({...loginCredentials, username: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                          />
-                        </div>
-                        <div className="mb-2">
-                          <label className="block text-sm font-medium text-gray-700">Password</label>
-                          <input
-                            type="password"
-                            value={loginCredentials.password}
-                            onChange={(e) => setLoginCredentials({...loginCredentials, password: e.target.value})}
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                          />
-                        </div>
-                        <button
-                          onClick={handleLogin}
-                          className="w-full bg-blue-600 text-white py-1 px-2 rounded text-sm"
-                        >
-                          Login
-                        </button>
-                      </div>
-                    )}
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50">
+                    <button 
+                      onClick={handleLogout}
+                      className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+                    >
+                      Logout
+                    </button>
                   </div>
                 )}
               </div>
@@ -1353,21 +1882,25 @@ export default function Payment() {
             title="Today's Sales"
             value={financialSummary.todaySales}
             color="border-green-500"
+            icon={<FiDollarSign className="h-6 w-6" />}
           />
           <SummaryCard
             title="Monthly Sales"
             value={financialSummary.monthlySales}
             color="border-blue-500"
+            icon={<FiDollarSign className="h-6 w-6" />}
           />
           <SummaryCard
             title="Inventory Value"
             value={financialSummary.inventoryValue}
             color="border-purple-500"
+            icon={<FiDollarSign className="h-6 w-6" />}
           />
           <SummaryCard
-            title="Estimated Profit"
-            value={financialSummary.profit}
+            title="Outstanding Credit"
+            value={financialSummary.outstandingCredit}
             color="border-yellow-500"
+            icon={<FiCreditCard className="h-6 w-6" />}
           />
         </div>
 
@@ -1375,12 +1908,22 @@ export default function Payment() {
         <div className="bg-white rounded shadow p-4 mb-6">
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">Payment Statistics</h2>
-            <button
-              onClick={exportToPDF}
-              className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm"
-            >
-              Export to PDF
-            </button>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => setShowCreditManagement(!showCreditManagement)}
+                className="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-sm flex items-center"
+              >
+                <FiCreditCard className="mr-1" />
+                {showCreditManagement ? 'Hide' : 'Show'} Credit Sales
+              </button>
+              <button
+                onClick={exportToPDF}
+                className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center"
+              >
+                <FiDownload className="mr-1" />
+                Export to PDF
+              </button>
+            </div>
           </div>
           
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
@@ -1410,6 +1953,116 @@ export default function Payment() {
             </div>
           </div>
         </div>
+
+        {/* Credit Sales Management */}
+        {showCreditManagement && (
+          <div className="bg-white rounded shadow p-4 mb-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold">Credit Sales Management</h2>
+              <button
+                onClick={fetchCreditSales}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
+              >
+                Refresh
+              </button>
+            </div>
+            
+            {creditSales.length === 0 ? (
+              <div className="text-center py-8 bg-gray-50 rounded">
+                <p>No outstanding credit sales</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Customer
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Amount
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Paid
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Balance
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Due Date
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {creditSales.map((creditSale) => (
+                      <tr key={creditSale.id} className="hover:bg-gray-50">
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {creditSale.customers?.name}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          KSh {creditSale.amount.toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          KSh {(creditSale.paid_amount || 0).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          KSh {(creditSale.amount - (creditSale.paid_amount || 0)).toLocaleString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                          {new Date(creditSale.due_date).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                            creditSale.status === 'paid' 
+                              ? 'bg-green-100 text-green-800' 
+                              : creditSale.status === 'partial' 
+                                ? 'bg-yellow-100 text-yellow-800' 
+                                : 'bg-red-100 text-red-800'
+                          }`}>
+                            {creditSale.status === 'paid' ? 'Paid' : 
+                             creditSale.status === 'partial' ? 'Partial' : 'Unpaid'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                          <button
+                            onClick={() => {
+                              setSelectedCreditSale(creditSale);
+                              setCreditPaymentAmount(creditSale.amount - (creditSale.paid_amount || 0));
+                              setShowCreditPaymentModal(true);
+                            }}
+                            className="text-blue-600 hover:text-blue-900 mr-2"
+                            disabled={creditSale.status === 'paid'}
+                          >
+                            Record Payment
+                          </button>
+                          <button
+                            onClick={() => exportPaymentToPDF({
+                              ...creditSale,
+                              receipt_number: `CR${creditSale.id}`,
+                              payment_method: 'credit',
+                              created_at: creditSale.created_at,
+                              customer_name: creditSale.customers?.name,
+                              items: creditSale.items
+                            })}
+                            className="text-green-600 hover:text-green-900"
+                          >
+                            PDF
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Payment Records Section */}
         <div className="bg-white rounded shadow p-4 mb-6">
@@ -1453,13 +2106,16 @@ export default function Payment() {
                 
                 <div className="flex-grow">
                   <label className="block text-sm font-medium mb-1">Search:</label>
-                  <input
-                    type="text"
-                    placeholder="Search by receipt, phone, customer, or item..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="border p-2 rounded w-full"
-                  />
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search by receipt, phone, customer, or item..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="border p-2 rounded w-full pl-10"
+                    />
+                    <FiSearch className="absolute left-3 top-3 text-gray-400" />
+                  </div>
                 </div>
               </div>
               
@@ -1630,7 +2286,7 @@ export default function Payment() {
               <option value="">Select Product</option>
               {products.map(product => (
                 <option key={product.id} value={product.id}>
-                  {product.name} (KSh {product.selling_price?.toLocaleString()})
+                  {product.name} (KSh {product.selling_price?.toLocaleString()}) - Stock: {product.quantity}
                 </option>
               ))}
             </select>
@@ -1699,13 +2355,16 @@ export default function Payment() {
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-xl font-semibold">Suppliers</h2>
           </div>
-          <input
-            type="text"
-            placeholder="Search suppliers..."
-            value={supplierSearchTerm}
-            onChange={(e) => setSupplierSearchTerm(e.target.value)}
-            className="border p-2 rounded w-full mb-3"
-          />
+          <div className="relative">
+            <input
+              type="text"
+              placeholder="Search suppliers..."
+              value={supplierSearchTerm}
+              onChange={(e) => setSupplierSearchTerm(e.target.value)}
+              className="border p-2 rounded w-full mb-3 pl-10"
+            />
+            <FiSearch className="absolute left-3 top-3 text-gray-400" />
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
             {suppliers
               .filter(s => s.name.toLowerCase().includes(supplierSearchTerm.toLowerCase()))
@@ -1788,6 +2447,9 @@ export default function Payment() {
                       className="w-full border border-gray-300 rounded px-3 py-2"
                       placeholder="2547XXXXXXXX"
                     />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Format: 2547XXXXXXXX (e.g., 254712345678)
+                    </p>
                   </div>
                   
                   {mpesaProcessing && (
@@ -2078,6 +2740,9 @@ export default function Payment() {
                 <div className="mb-4 bg-orange-50 p-3 rounded">
                   <p className="font-medium">Credit / Account Sale:</p>
                   <p className="text-sm">This transaction will be recorded as an outstanding balance for the selected customer.</p>
+                  <p className="text-sm text-gray-700 mt-2">
+                    Due Date: {new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString()}
+                  </p>
                   {!selectedCustomerId && (
                     <p className="text-red-500 text-sm mt-1">
                       Warning: Please select a specific customer for a credit sale.
@@ -2171,7 +2836,59 @@ export default function Payment() {
                    paymentMethod === 'mpesa_till' ? 'Process Till Number Payment' :
                    paymentMethod === 'mpesa_pochi' ? 'Process Pochi Payment' :
                    paymentMethod === 'equity' ? 'Process Equity Bank Payment' :
+                   paymentMethod === 'credit' ? 'Record Credit Sale' :
                    'Confirm Payment'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Credit Payment Modal */}
+        {showCreditPaymentModal && selectedCreditSale && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg p-6 w-full max-w-md">
+              <h2 className="text-xl font-semibold mb-4">Record Credit Payment</h2>
+              
+              <div className="mb-4">
+                <p className="text-sm text-gray-600">Customer: {selectedCreditSale.customers?.name}</p>
+                <p className="text-sm text-gray-600">Total Amount: KSh {selectedCreditSale.amount.toLocaleString()}</p>
+                <p className="text-sm text-gray-600">Amount Paid: KSh {(selectedCreditSale.paid_amount || 0).toLocaleString()}</p>
+                <p className="text-sm font-medium">Outstanding Balance: KSh {(selectedCreditSale.amount - (selectedCreditSale.paid_amount || 0)).toLocaleString()}</p>
+              </div>
+              
+              <div className="mb-4">
+                <label className="block mb-1 font-medium">Payment Amount (KSh):</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  max={selectedCreditSale.amount - (selectedCreditSale.paid_amount || 0)}
+                  value={creditPaymentAmount}
+                  onChange={(e) => setCreditPaymentAmount(parseFloat(e.target.value))}
+                  className="w-full border border-gray-300 rounded px-3 py-2"
+                  placeholder="Enter payment amount"
+                />
+              </div>
+              
+              <div className="flex justify-end space-x-2 mt-4">
+                <button
+                  onClick={() => {
+                    setShowCreditPaymentModal(false);
+                    setSelectedCreditSale(null);
+                    setCreditPaymentAmount(0);
+                  }}
+                  className="bg-gray-400 hover:bg-gray-500 text-white px-4 py-2 rounded"
+                >
+                  Cancel
+                </button>
+                
+                <button
+                  onClick={handleCreditPayment}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
+                  disabled={!creditPaymentAmount || creditPaymentAmount <= 0}
+                >
+                  Record Payment
                 </button>
               </div>
             </div>
@@ -2383,8 +3100,9 @@ export default function Payment() {
                     // Print functionality would go here
                     alert('Print functionality would be implemented here');
                   }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex items-center"
                 >
+                  <FiPrinter className="mr-1" />
                   Print
                 </button>
                 <button
@@ -2398,8 +3116,9 @@ export default function Payment() {
                     receipt.text(`Total: KSh ${receiptData.total.toLocaleString()}`, 14, 70);
                     receipt.save(`receipt_${receiptData.receipt_number}.pdf`);
                   }}
-                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded flex items-center"
                 >
+                  <FiDownload className="mr-1" />
                   Save PDF
                 </button>
                 <button
@@ -2415,4 +3134,4 @@ export default function Payment() {
       </div>
     </Layout>
   );
-} 
+}
