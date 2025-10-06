@@ -362,6 +362,7 @@ const Sales = () => {
                     item_id: selectedItem.id,
                     price: pricePerKg,
                     total: saleTotal,
+                    item_name: selectedItem.name,
                     quantity: saleWeight,
                     payment_method: 'cash' // Default payment method for quick sales
                 }]);
@@ -631,6 +632,7 @@ const Sales = () => {
                 price: item.price_per_kg,
                 total: item.total_price,
                 item_id: item.id,
+                item_name: item.name,
                 quantity: item.weight,
                 payment_method: paymentMethod
             }));
