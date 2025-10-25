@@ -39,11 +39,11 @@ const Sales = () => {
     const [targetAmount, setTargetAmount] = useState('');
     const [calculatedWeight, setCalculatedWeight] = useState(0);
     
-    // Weighing scale integration
+    // Weighing scale integration - UPDATED FOR WEBSOCKET
     const [scaleConnected, setScaleConnected] = useState(false);
     const [scaleReading, setScaleReading] = useState(0);
     const [useScale, setUseScale] = useState(false);
-    const [scalePort, setScalePort] = useState(null);
+    const [scaleWebSocket, setScaleWebSocket] = useState(null);
     const [scaleError, setScaleError] = useState(null);
 
     // States for different tabs
@@ -132,137 +132,105 @@ const Sales = () => {
         }
     }, [scaleReading, orderSellingMethod, useScale, currentOrderItem, inventory]);
 
-    const checkScaleConnection = async () => {
+    // =====================================================
+    // WEBSOCKET SCALE CONNECTION FUNCTIONS - UPDATED
+    // =====================================================
+    
+    const connectToScale = async () => {
         setScaleError(null);
-        if ('serial' in navigator) {
-            try {
-                const ports = await navigator.serial.getPorts();
-                if (ports.length > 0 && ports[0].readable) {
-                    setScaleConnected(true);
-                    setScalePort(ports[0]);
-                    startScaleReading(ports[0]);
-                    return;
-                }
-            } catch (error) {
-                console.log("No previously connected scale found:", error);
-                setScaleError("No previously connected scale found");
-            }
-        } else {
-            setScaleError("Web Serial API is not supported in your browser");
-        }
-        setScaleConnected(false);
-        setScalePort(null);
-    };
-
-    const startScaleReading = async (port) => {
-        if (!port || !port.readable) return;
         
         try {
-            const reader = port.readable.getReader();
+            // Connect to WebSocket bridge server
+            // IMPORTANT: Update this URL to match your server configuration
+            const ws = new WebSocket('ws://localhost:8080');
             
-            const readLoop = async () => {
-                try {
-                    const { value, done } = await reader.read();
-                    if (done) {
-                        reader.releaseLock();
-                        return;
-                    }
-                    
-                    const textDecoder = new TextDecoder();
-                    const scaleData = textDecoder.decode(value).trim();
-                    
-                    // Parse common scale data formats
-                    const weightMatch = scaleData.match(/(\d+\.?\d*)\s*kg|(\d+\.?\d*)\s*g/i);
-                    if (weightMatch) {
-                        let weight = parseFloat(weightMatch[1] || weightMatch[2]);
-                        // Convert grams to kg if needed
-                        if (scaleData.toLowerCase().includes('g') && !scaleData.toLowerCase().includes('kg')) {
-                            weight = weight / 1000;
-                        }
-                        setScaleReading(Math.max(0, weight)); // Ensure non-negative
+            ws.onopen = () => {
+                console.log('WebSocket connected to scale bridge');
+                ws.send(JSON.stringify({ command: 'connect' }));
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                
+                switch (data.type) {
+                    case 'connected':
+                        setScaleConnected(true);
+                        setScaleWebSocket(ws);
+                        alert('Scale connected successfully via Ethernet!');
+                        break;
                         
+                    case 'weight':
+                        setScaleReading(data.value);
+                        
+                        // Auto-update weight if scale is being used
                         if (useScale && orderSellingMethod === 'weight') {
-                            setCurrentOrderWeight(weight);
+                            setCurrentOrderWeight(data.value);
                         }
-                    }
-                    
-                    // Continue reading
-                    setTimeout(readLoop, 100);
-                } catch (error) {
-                    console.error("Error reading from scale:", error);
-                    setScaleError("Error reading from scale: " + error.message);
-                    setScaleConnected(false);
-                    setScalePort(null);
+                        break;
+                        
+                    case 'error':
+                        setScaleError(data.message);
+                        setScaleConnected(false);
+                        console.error('Scale error:', data.message);
+                        break;
+                        
+                    case 'disconnected':
+                        setScaleConnected(false);
+                        setScaleWebSocket(null);
+                        setScaleError('Scale disconnected');
+                        break;
                 }
             };
             
-            readLoop();
-        } catch (error) {
-            console.error("Error starting scale reading:", error);
-            setScaleError("Error starting scale reading: " + error.message);
-            setScaleConnected(false);
-            setScalePort(null);
-        }
-    };
-
-    const connectToScale = async () => {
-        setScaleError(null);
-        if (!('serial' in navigator)) {
-            setScaleError('Web Serial API is not supported in your browser. Please use Chrome, Edge, or Opera with HTTPS.');
-            return;
-        }
-
-        try {
-            const port = await navigator.serial.requestPort();
-            await port.open({ 
-                baudRate: 9600,
-                dataBits: 8,
-                stopBits: 1,
-                parity: 'none'
-            });
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                setScaleError('Failed to connect to scale bridge server. Make sure the server is running on port 8080.');
+                setScaleConnected(false);
+            };
             
-            setScalePort(port);
-            setScaleConnected(true);
-            startScaleReading(port);
-            alert('Scale connected successfully!');
+            ws.onclose = () => {
+                console.log('WebSocket closed');
+                setScaleConnected(false);
+                setScaleWebSocket(null);
+            };
+            
         } catch (error) {
             console.error("Error connecting to scale:", error);
-            if (error.name === 'NotAllowedError') {
-                setScaleError('Permission denied. Please allow access to the serial port.');
-            } else {
-                setScaleError('Failed to connect to scale. Please check the connection and try again.');
-            }
+            setScaleError('Failed to connect to scale bridge server: ' + error.message);
             setScaleConnected(false);
-            setScalePort(null);
         }
     };
 
-    const disconnectScale = async () => {
-        if (scalePort) {
+    const disconnectScale = () => {
+        if (scaleWebSocket) {
             try {
-                if (scalePort.readable) {
-                    const reader = scalePort.readable.getReader();
-                    await reader.cancel();
-                    reader.releaseLock();
-                }
-                await scalePort.close();
+                scaleWebSocket.send(JSON.stringify({ command: 'disconnect' }));
+                scaleWebSocket.close();
             } catch (error) {
-                console.error("Error disconnecting scale:", error);
+                console.error('Error disconnecting scale:', error);
             }
+            setScaleWebSocket(null);
         }
         setScaleConnected(false);
-        setScalePort(null);
         setScaleReading(0);
         setUseScale(false);
+        setScaleError(null);
     };
 
+    // Auto-connect to scale on mount
     useEffect(() => {
-        checkScaleConnection();
+        // Automatically try to connect to scale when component mounts
+        connectToScale();
         
         return () => {
+            // Cleanup on unmount
             disconnectScale();
         };
     }, []);
+
+    // =====================================================
+    // END OF WEBSOCKET SCALE FUNCTIONS
+    // =====================================================
 
     // Fetch sales data for transactions tab
     const fetchSalesData = async () => {
@@ -1051,13 +1019,13 @@ const Sales = () => {
 
                 {activeTab === 'newOrder' && (
                     <div>
-                        {/* Scale Status */}
+                        {/* Scale Status - UPDATED FOR ETHERNET */}
                         <div className="mb-6 bg-white p-4 rounded-lg shadow">
                             <div className="flex flex-wrap items-center justify-between">
                                 <div className="flex items-center">
                                     <span className={`inline-block w-3 h-3 rounded-full mr-2 ${scaleConnected ? 'bg-green-500' : 'bg-red-500'}`}></span>
                                     <span className="font-medium">
-                                        Weighing Scale: {scaleConnected ? 'Connected' : 'Not Connected'}
+                                        CSX6 Scale (Ethernet): {scaleConnected ? 'Connected' : 'Not Connected'}
                                     </span>
                                     {scaleConnected && (
                                         <span className="ml-4 bg-blue-100 text-blue-800 px-2 py-1 rounded text-sm">
@@ -1092,8 +1060,11 @@ const Sales = () => {
                                 </div>
                             </div>
                             {scaleError && (
-                                <div className="mt-2 text-red-600 text-sm">
-                                    {scaleError}
+                                <div className="mt-2 text-red-600 text-sm bg-red-50 p-2 rounded">
+                                    <strong>Error:</strong> {scaleError}
+                                    <div className="text-xs mt-1">
+                                        Make sure the scale bridge server is running. Run: <code className="bg-white px-1 py-0.5 rounded">node scale-bridge-server.js</code>
+                                    </div>
                                 </div>
                             )}
                         </div>
